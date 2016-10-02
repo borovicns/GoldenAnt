@@ -1,5 +1,5 @@
 const int MOIS_SENS = 0;
-const int FEED_MOIST_SENS = 3;
+//const int FEED_MOIST_SENS = 3;
 const int DEFAULT_MOIST = 40;
 int MINIMUM_MOIST;
 
@@ -80,7 +80,7 @@ void loop() {
 }
 
 void initMoistureModule(){
-  pinMode(FEED_MOIST_SENS, OUTPUT);
+  //pinMode(FEED_MOIST_SENS, OUTPUT);
   MINIMUM_MOIST = DEFAULT_MOIST;
 }
 
@@ -103,13 +103,14 @@ void initControlModule(){
 }
 
 int readMoisture(){
-  digitalWrite(FEED_MOIST_SENS, HIGH);
+  //digitalWrite(FEED_MOIST_SENS, HIGH);
   int value = analogRead(MOIS_SENS);
   Serial.print("Real value: ");
   Serial.println(value);
-  digitalWrite(FEED_MOIST_SENS, LOW);
+  //digitalWrite(FEED_MOIST_SENS, LOW);
 
-  return map(value, 0, 1023, 0, 100);;
+  //240 completely wet and 865 completely dry
+  return 100-map(value, 240, 865, 0, 100);;
 }
 
 int readLight(){
