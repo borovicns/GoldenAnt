@@ -45,6 +45,7 @@ void loop() {
       else if(condition == 2){//USE CURRENT MOISTURE LEVEL AS MINIMUM LEVEL
         Serial.print("MIN MOISTURE LEVEL SET TO: ");
         MINIMUM_MOIST = readMoisture();
+        Serial.println(MINIMUM_MOIST);
       }
       else if(condition == 3){//TEST CONDITION
         Serial.println("Current condition: TEST CONDITION");
@@ -114,8 +115,6 @@ void initControlModule(){
 int readMoisture(){
   int value = analogRead(MOIS_SENS);
   //300 completely wet and 1024 completely dry
-  Serial.print("Real value: ");
-  Serial.println(value);
   value = 100-map(value, 300, 1024, 0, 100);
   Serial.print("Moisture level: ");
   Serial.println(value);
@@ -180,7 +179,6 @@ void handleButton(){
   }
   else if(condition == USE_CURRENT_MOIST_CONDITION && millis() - mlls > 5000){
     condition = USE_DEFAULT_MOIST_CONDITION;
-    MINIMUM_MOIST = DEFAULT_MOIST;
     playTone(2500, 250, 250, 2);
   }
   else if(condition == USE_DEFAULT_MOIST_CONDITION && millis() - mlls > 7000){
