@@ -21,12 +21,14 @@ const int TEST_CONDITION = 4;
 int condition;
 long mlls;
 int loopDelay;
+bool flagButton;
 
 void setup() {
   Serial.begin(9600);
   initMoistureModule();
   initLightModule();
   initIndicationModule();
+  initControlModule();
 }
 
 void loop() {
@@ -35,7 +37,9 @@ void loop() {
   }
   else{
     if(condition == NO_CONDITION){
+      Serial.println("Current condition: #0 NO CONDITION");
       int val = readMoisture();
+      Serial.print("Moisture value %: ");
       Serial.println(val);
       if(val >= MINIMUM_MOIST){
         doBlink(GREEN_LED, map(val, MINIMUM_MOIST, 100, 500, 1500), 1);
@@ -52,15 +56,18 @@ void loop() {
       }
     }
     else if(condition == USE_CURRENT_MOIST_CONDITION){
+      Serial.println("Current condition: #2 CUSTOM MOISTURE LEVEL");
       condition = NO_CONDITION;
       MINIMUM_MOIST = readMoisture();
       loopDelay = 0;
     }
     else if(condition == USE_DEFAULT_MOIST_CONDITION){
+      Serial.println("Current condition: #3 DEFAULT MOISTURE LEVEL");
       condition = NO_CONDITION;
       MINIMUM_MOIST = DEFAULT_MOIST;
     }
     else if(condition == TEST_CONDITION){
+      Serial.println("Current condition: #4 TEST CONDITION");
       condition = NO_CONDITION;
       doBlink(GREEN_LED, 250, 5);
       doBlink(GREEN_LED, 1000, 1);
@@ -100,6 +107,7 @@ void initControlModule(){
   condition = NO_CONDITION;
   mlls = 0;
   loopDelay = 0;
+  flagButton = false;
 }
 
 int readMoisture(){
@@ -117,6 +125,8 @@ int readLight(){
   digitalWrite(FEED_LIGHT_SENS, HIGH);
   int value = analogRead(LIGHT_SENS);
   digitalWrite(FEED_LIGHT_SENS, LOW);
+  Serial.print("Light level: ");
+  Serial.println(value);
   
   return map(value, 0, 1023, 0, 100);
 }
@@ -152,6 +162,7 @@ int readButton(){
 }
 
 void handleButton(){
+  Serial.println("Button pressed");
   loopDelay = 0;
   if(condition == NO_CONDITION){
     doLoudBlink(GREEN_LED, 250, 1, 2000);
