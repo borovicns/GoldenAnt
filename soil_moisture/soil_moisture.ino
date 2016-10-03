@@ -118,7 +118,7 @@ int readMoisture(){
   //digitalWrite(FEED_MOIST_SENS, LOW);
 
   //240 completely wet and 865 completely dry
-  return 100-map(value, 240, 865, 0, 100);;
+  return 100-map(value, 240, 865, 0, 100);
 }
 
 int readLight(){
