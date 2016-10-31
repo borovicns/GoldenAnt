@@ -1,3 +1,16 @@
+/**
+* SoilMoisture project
+*
+* URL: https://github.com/franciscoalario/GoldenAnt/wiki/Soil%20moisture%20sensor
+*
+* Description: Basic tool which blinks a green led when the soil moisture is
+* still enough and a red light when the soil is too dry.
+*
+* Created by Francisco Alario Salom, October 2016
+*/
+
+#include <Arduino.h>
+
 const int MOIS_SENS_PIN = 1;
 //const int FEED_MOIST_SENS = 3;
 const int DEFAULT_MOIST = 40;
@@ -28,28 +41,9 @@ long mlls;
 int loopDelay;
 bool flagButton;
 
-void setup() {
-  Serial.begin(9600);
-  initMoistureModule();
-  initLightModule();
-  initIndicationModule();
-  initControlModule();
-}
-
-void loop() {
-  if(readButton() == HIGH){
-    handleButton();
-  }
-  else{
-    if(flagButton){//Button has been just released and condition action must be taken
-      settleCondition();
-    }
-
-    if(millis()-mlls >= measurementDelay) doMeasurement();
-  }
-
-  delay(loopDelay);
-}
+/**
+INIT MODULES
+**/
 
 void initMoistureModule(){
   //pinMode(FEED_MOIST_SENS, OUTPUT);
@@ -75,6 +69,21 @@ void initControlModule(){
   flagButton = false;
 }
 
+/**
+READ METHODS
+**/
+
+int readLight(){
+  digitalWrite(FEED_LIGHT_SENS_PIN, HIGH);
+  int value = analogRead(LIGHT_SENS_PIN);
+  digitalWrite(FEED_LIGHT_SENS_PIN, LOW);
+  value = map(value, 0, 1023, 0, 100);
+  Serial.print("Light level: ");
+  Serial.println(value);
+
+  return value;
+}
+
 int readMoisture(){
   int value = analogRead(MOIS_SENS_PIN);
   //300 completely wet and 1024 completely dry
@@ -84,30 +93,39 @@ int readMoisture(){
   return value;
 }
 
-int readLight(){
-  digitalWrite(FEED_LIGHT_SENS_PIN, HIGH);
-  int value = analogRead(LIGHT_SENS_PIN);
-  digitalWrite(FEED_LIGHT_SENS_PIN, LOW);
-  value = map(value, 0, 1023, 0, 100);
-  Serial.print("Light level: ");
-  Serial.println(value);
-  
-  return value;
+int readButton(){
+  return !digitalRead(BUTTON_PIN);
 }
+
+void doMeasurement(){
+  int val = readMoisture();
+  Serial.print("Measurement: ");
+  Serial.println(val);
+  mlls = millis();
+  if(val >= MINIMUM_MOIST){
+    doBlink(GREEN_LED_PIN, map(val, MINIMUM_MOIST, 100, 500, 1500), 1);
+    measurementDelay = GREEN_COND_MEASUREMENT_DELAY;
+    Serial.println("Delay set for green condition");
+  }
+  else{
+    if(readLight() >= ALARM_LIGHT_LEVEL){
+      doLoudBlink(RED_LED_PIN, map(val, 0, MINIMUM_MOIST, 250, 500), 5-map(val, 0, MINIMUM_MOIST, 0, 4), 2000);
+    }
+    else{
+      doBlink(RED_LED_PIN, map(val, 0, MINIMUM_MOIST, 250, 500), 5-map(val, 0, MINIMUM_MOIST, 0, 4));
+    }
+    measurementDelay = RED_COND_MEASUREMENT_DELAY;
+    Serial.println("Delay set for red condition");
+  }
+}
+
+/**
+ACTION METHODS
+**/
 
 void doBlink(int LED, int duration, int times){
   for(int i=0;i<times;i++){
     digitalWrite(LED, HIGH);
-    delay(duration);
-    digitalWrite(LED, LOW);
-    delay(duration);
-  }
-}
-
-void doLoudBlink(int LED, int duration, int times, int freq){
-  for(int i=0;i<times;i++){
-    digitalWrite(LED, HIGH);
-    tone(SPEAKER_PIN, freq, duration);
     delay(duration);
     digitalWrite(LED, LOW);
     delay(duration);
@@ -121,9 +139,18 @@ void playTone(int freq, int duration, int interval, int times){
   }
 }
 
-int readButton(){
-  return !digitalRead(BUTTON_PIN);
+void doLoudBlink(int LED, int duration, int times, int freq){
+  for(int i=0;i<times;i++){
+    digitalWrite(LED, HIGH);
+    playTone(freq, duration, duration, 1);
+    digitalWrite(LED, LOW);
+    delay(duration);
+  }
 }
+
+/**
+CONTROL MEHTODS
+**/
 
 void handleButton(){
   if(!flagButton){
@@ -134,7 +161,7 @@ void handleButton(){
     condition = NO_CONDITION_SET;
     flagButton = true;
   }
-  
+
   if(condition == NO_CONDITION_SET && millis() - mlls > 2000){
     condition = USE_CURRENT_MOIST_CONDITION;
     playTone(1000, 250, 0, 1);
@@ -187,24 +214,29 @@ void settleCondition(){
   else Serial.println("Current condition: UNKNOWN");
 }
 
-void doMeasurement(){
-  int val = readMoisture();
-  Serial.print("Measurement: ");
-  Serial.println(val);
-  mlls = millis();
-  if(val >= MINIMUM_MOIST){
-    doBlink(GREEN_LED_PIN, map(val, MINIMUM_MOIST, 100, 500, 1500), 1);
-    measurementDelay = GREEN_COND_MEASUREMENT_DELAY;
-    Serial.println("Delay set for green condition");
+/**
+ARDUINO METHODS
+**/
+
+void setup() {
+  Serial.begin(9600);
+  initMoistureModule();
+  initLightModule();
+  initIndicationModule();
+  initControlModule();
+}
+
+void loop() {
+  if(readButton() == HIGH){
+    handleButton();
   }
   else{
-    if(readLight() >= ALARM_LIGHT_LEVEL){
-      doLoudBlink(RED_LED_PIN, map(val, 0, MINIMUM_MOIST, 250, 500), 5-map(val, 0, MINIMUM_MOIST, 0, 4), 2000);
+    if(flagButton){//Button has been just released and condition action must be taken
+      settleCondition();
     }
-    else{
-      doBlink(RED_LED_PIN, map(val, 0, MINIMUM_MOIST, 250, 500), 5-map(val, 0, MINIMUM_MOIST, 0, 4));
-    }
-    measurementDelay = RED_COND_MEASUREMENT_DELAY;
-    Serial.println("Delay set for red condition");
+
+    if(millis()-mlls >= measurementDelay) doMeasurement();
   }
+
+  delay(loopDelay);
 }
