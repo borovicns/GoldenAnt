@@ -48,7 +48,7 @@ volatile boolean debouncedButtonState = NOT_PUSHED;
 volatile boolean bounceState = false;
 
 /**
-ROTARY ENCODER VARIABLES
+* ROTARY ENCODER VARIABLES
 **/
 
 static boolean rotating=false;
@@ -57,6 +57,36 @@ bool rotaryFlag = false;
 #define ROTARY_PIN_A 2
 #define ROTARY_PIN_B 3
 #define ROTARY_DELAY 2
+
+/**
+* GRAPHIC VARIABLES
+*/
+
+boolean isDisplayOn = true;
+
+/**
+* GRAPHIC METHODS
+*/
+
+boolean isDisplayOn(){
+  return isDisplayOn;
+}
+
+void turnOnDisplay(){
+  if(!isDisplayOn()){
+    //TODO
+    //Turn display on
+    isDisplayOn = true;
+  }
+}
+
+void turnOffDisplay(){
+  if(isDisplayOn){
+    //TODO
+    //Turn display off
+    isDisplayOn = false;
+  }
+}
 
 /**
 * ROTARY ENCODER METHODS
@@ -152,8 +182,12 @@ void handleRotaryEncoder(){
       if(!rotaryFlag){
         //CW
         rotaryFlag = true;
-        moveMenuIndexForward();
-        updateMainMenu();
+        
+        if(isDisplayOn()){
+          moveMenuIndexForward();
+          updateMainMenu();
+        }
+        else turnOnDisplay();
       }
       else rotaryFlag = false;
     }
@@ -161,8 +195,12 @@ void handleRotaryEncoder(){
       if(!rotaryFlag){
         //CCW
         rotaryFlag = true;
-        moveMenuIndexBackward();
-        updateMainMenu();
+        
+        if(isDisplayOn()){
+          moveMenuIndexBackward();
+          updateMainMenu();
+        }
+        else turnDisplayOn();
       }
       else rotaryFlag = false;
     }
@@ -177,9 +215,12 @@ void handleRotaryEncoder(){
 * return: none
 */
 void executeEnterButton(){
-  //TEMPORARY CODE
-  Serial.print("Option: ");
-  Serial.println(mainMenu[menuIndex].name);
+  if(isDisplayOn){
+    //TEMPORARY CODE
+    Serial.print("Option: ");
+    Serial.println(mainMenu[menuIndex].name);
+  }
+  else turnOnDisplay();
 }
 
 /**
@@ -189,20 +230,24 @@ void executeEnterButton(){
 * return: none
 */
 void executeCancelButton(){
-  //TODO
+  if(isDisplayOn()){
+    //TODO
+  }
+  else turnOnDisplay();
 }
 
 /**
 * Executes what is necessary to shut off the display but the device is still
 * running. One pulsation turns off the display and another pulsation turns
-* it on, also any movement of the rotary encoder or the Enter/Exit buttons
+* it on, also any movement of the rotary encoder or the Enter and Exit/Cancel buttons
 * turn the display on
 * args: none
 * return: none
 */
 
 void executeShutOffButton(){
-  //TODO
+  if(isDisplayOn()) turnOffDisplay();
+  else turnOnDisplay();
 }
 
 /**
