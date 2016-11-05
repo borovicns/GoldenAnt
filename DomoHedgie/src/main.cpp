@@ -193,6 +193,19 @@ void executeCancelButton(){
 }
 
 /**
+* Executes what is necessary to shut off the display but the device is still
+* running. One pulsation turns off the display and another pulsation turns
+* it on, also any movement of the rotary encoder or the Enter/Exit buttons
+* turn the display on
+* args: none
+* return: none
+*/
+
+void executeShutOffButton(){
+  //TODO
+}
+
+/**
 * Generic method to handle the pulsation of any button. The method receives the
 * button pin and executes the proper method.
 * args: buttonPin - The button pin which has triggered this method.
@@ -220,6 +233,9 @@ void handleButton(int buttonPin){
         case CANCEL_BUTTON_PIN:
           executeCancelButton();
           break;
+        case SHUTOFF_BUTTON_PIN:
+          executeShutOffButton();
+          break;
       }
     }
   }
@@ -241,6 +257,15 @@ void handleEnterButton() {
 */
 void handleCancelButton(){
   handleButton(CANCEL_BUTTON_PIN);
+}
+
+/**
+* The ISR method fot the Shut off button
+* args: none
+* return: none
+*/
+void handleShutoffButton(){
+  handleButton(SHUTOFF_BUTTON_PIN);
 }
 
 /**
@@ -287,6 +312,11 @@ void initCancelButton(){
   attachInterrupt(digitalPinToInterrupt(CANCEL_BUTTON_PIN), handleCancelButton, LOW);
 }
 
+void initShutoffButton(){
+  pinMode(SHUTOF_BUTTON_PIN, INPUT);
+  attachInterrupt(digitalPinToInterrupt(SHUTOFF_BUTTON_PIN), handleShutoffButton, LOW);
+}
+
 void initRotaryEncoder(){
   pinMode(ROTARY_PIN_A, INPUT);
   pinMode(ROTARY_PIN_B, INPUT);
@@ -305,6 +335,7 @@ void setup()
   initMenuItems();
   initRotaryEncoder();
   initEnterButton();
+  initShutoffButton();
 }
 
 void loop()
