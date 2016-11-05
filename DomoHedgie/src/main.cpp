@@ -62,29 +62,29 @@ bool rotaryFlag = false;
 * GRAPHIC VARIABLES
 */
 
-boolean isDisplayOn = true;
+boolean displayOn = true;
 
 /**
 * GRAPHIC METHODS
 */
 
 boolean isDisplayOn(){
-  return isDisplayOn;
+  return displayOn;
 }
 
 void turnOnDisplay(){
   if(!isDisplayOn()){
     //TODO
     //Turn display on
-    isDisplayOn = true;
+    displayOn = true;
   }
 }
 
 void turnOffDisplay(){
-  if(isDisplayOn){
+  if(isDisplayOn()){
     //TODO
     //Turn display off
-    isDisplayOn = false;
+    displayOn = false;
   }
 }
 
@@ -182,7 +182,7 @@ void handleRotaryEncoder(){
       if(!rotaryFlag){
         //CW
         rotaryFlag = true;
-        
+
         if(isDisplayOn()){
           moveMenuIndexForward();
           updateMainMenu();
@@ -195,12 +195,12 @@ void handleRotaryEncoder(){
       if(!rotaryFlag){
         //CCW
         rotaryFlag = true;
-        
+
         if(isDisplayOn()){
           moveMenuIndexBackward();
           updateMainMenu();
         }
-        else turnDisplayOn();
+        else turnOnDisplay();
       }
       else rotaryFlag = false;
     }
@@ -215,7 +215,7 @@ void handleRotaryEncoder(){
 * return: none
 */
 void executeEnterButton(){
-  if(isDisplayOn){
+  if(isDisplayOn()){
     //TEMPORARY CODE
     Serial.print("Option: ");
     Serial.println(mainMenu[menuIndex].name);
@@ -358,7 +358,7 @@ void initCancelButton(){
 }
 
 void initShutoffButton(){
-  pinMode(SHUTOF_BUTTON_PIN, INPUT);
+  pinMode(SHUTOFF_BUTTON_PIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(SHUTOFF_BUTTON_PIN), handleShutoffButton, LOW);
 }
 
