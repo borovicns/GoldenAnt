@@ -15,7 +15,53 @@
 #include "Arduino.h"
 
 /**
-MENU VARIABLES
+* ANALOG PINS
+**/
+
+#define ENVIRONMENTAL_LIGHT_SENSOR_PIN 0
+#define TEMPERATURE_SENSOR_PIN 1
+
+/**
+* DIGITAL PINS
+**/
+
+#define ROTARY_A_PIN 2 //ISR Pin 0
+#define ROTARY_B_PIN 3 //ISR Pin 1
+
+#define LED_HEATER_ON_PIN 4 //PWM Pin
+#define LED_LOW_TEMPERATURE_PIN 5 //PWM Pin
+#define LED_LIGHT_ON_PIN 6 //PWM Pin
+
+#define HEATER_MODE_SWITCH_AUTO_PIN 7
+#define HEATER_MODE_SWITCH_OFF_PIN 8
+#define HEATER_MODE_SWITCH_ON_PIN 9
+#define HEATER_RELAY_PIN 10
+
+#define LIGHT_MODE_SWITCH_AUTO_PIN 11
+#define LIGHT_MODE_SWITCH_OFF_PIN 12
+#define LIGHT_MODE_SWITCH_ON_PIN 13
+#define LIGHT_RELAY_PIN 14
+
+#define ENTER_BUTTON_PIN 18 //ISR Pin 5
+#define CANCEL_BUTTON_PIN 19 //ISR Pin 4
+#define SHUTOFF_BUTTON_PIN 20 //ISR Pin 3
+
+/**
+* DATETIME VARIABLES
+**/
+
+struct Datetime{
+  int day;
+  int month;
+  int year;
+
+  int hour;
+  int minute;
+  int second;
+};
+
+/**
+* MENU VARIABLES
 **/
 
 struct MenuItem{
@@ -28,7 +74,7 @@ MenuItem mainMenu[mainMenuDimension];
 int menuIndex;
 
 /**
-BUTTONS VARIABLES
+* BUTTONS VARIABLES
 **/
 
 #define PUSHED false
@@ -36,10 +82,6 @@ BUTTONS VARIABLES
 #define WATCH_BUTTON true
 #define IGNORE_BUTTON false
 #define BUTTON_WAIT_INTERVAL 6000 //microseconds
-
-#define ENTER_BUTTON_PIN 18 //ISR Pin 5
-#define CANCEL_BUTTON_PIN 19 //ISR Pin 4
-#define SHUTOFF_BUTTON_PIN 20 //ISR Pin 3
 
 unsigned long previousMicros = 0;
 boolean loopPrevState = NOT_PUSHED;
@@ -54,15 +96,56 @@ volatile boolean bounceState = false;
 static boolean rotating=false;
 bool rotaryFlag = false;
 
-#define ROTARY_PIN_A 2
-#define ROTARY_PIN_B 3
 #define ROTARY_DELAY 2
+
+/**
+* HEATER VARIABLES
+**/
+
+boolean heaterOn = false;
+int currentTemp;
+long millisHeater;
+float heaterTotalSeconds;
+#define MIN_TEMP_ALLOWED 23
+#define MAX_TEMP_ALLOWED 30
+
+#define HEATER_MODE_AUTO 1
+#define HEATER_MODE_OFF 2
+#define HEATER_MODE_ON 3
+int heaterMode;
 
 /**
 * GRAPHIC VARIABLES
 */
 
 boolean displayOn = true;
+
+/**
+* DATETIME METHODS
+**/
+
+Datetime getDateTime(){
+  Datetime now;
+  now.day = 1;
+  now.month = 1;
+  now.year = 1970;
+
+  now.hour = now.minute = now.second = 0;
+
+  return now;
+}
+
+/**
+* LOG METHODS
+**/
+
+void log(String message){
+  String log = "LOGGED: ";
+  log.concat(message);
+  Serial.println(log);
+
+  //TODO
+}
 
 /**
 * GRAPHIC METHODS
@@ -85,6 +168,92 @@ void turnOffDisplay(){
     //TODO
     //Turn display off
     displayOn = false;
+  }
+}
+
+/**
+* HEATER METHODS
+**/
+
+void startHeaterTimeTracking(){
+  millisHeater = millis();
+}
+
+void updateHeaterTimeTracking(){
+  if(millisHeater != 0){
+    long now = millis();
+    heaterTotalSeconds += ((now-millisHeater)/1000);
+
+    millisHeater = now;
+  }
+}
+
+void stopHeaterTimeTracking(){
+  updateHeaterTimeTracking();
+  millisHeater = 0;
+}
+
+boolean isHeaterOn(){
+  return heaterOn;
+}
+
+int getHeaterMode(){
+  return heaterMode;
+}
+
+void turnOnHeater(){
+  if(!isHeaterOn()){
+    digitalWrite(HEATER_RELAY_PIN, HIGH);
+    startHeaterTimeTracking();
+
+    Datetime now = getDateTime();
+    String mode;
+    switch(getHeaterMode()){
+      case HEATER_MODE_AUTO:
+        mode = "AUTO";
+        break;
+      case HEATER_MODE_OFF:
+        mode = "OFF";
+        break;
+      case HEATER_MODE_ON:
+        mode = "ON";
+        break;
+    }
+
+    String message = "HEATER;";
+    message.concat(mode); message.concat(";");message.concat("ON;");
+    message.concat(now.day); message.concat("/"); message.concat(now.month); message.concat("/"); message.concat(now.year); message.concat(" ");
+    message.concat(now.hour); message.concat(":"); message.concat(now.minute); message.concat(":"); message.concat(now.second); message.concat(";");
+    message.concat(heaterTotalSeconds);
+    log(message);
+  }
+}
+
+void turnOffHeater(){
+  if(isHeaterOn()){
+    digitalWrite(HEATER_RELAY_PIN, LOW);
+    stopHeaterTimeTracking();
+
+    Datetime now = getDateTime();
+    String mode;
+    switch(getHeaterMode()){
+      case HEATER_MODE_AUTO:
+        mode = "AUTO";
+        break;
+      case HEATER_MODE_OFF:
+        mode = "OFF";
+        break;
+      case HEATER_MODE_ON:
+        mode = "ON";
+        break;
+    }
+
+    String message = "HEATER;";
+    message.concat(mode); message.concat(";");message.concat("OFF;");
+    message.concat(now.day); message.concat("/"); message.concat(now.month); message.concat("/"); message.concat(now.year); message.concat(" ");
+    message.concat(now.hour); message.concat(":"); message.concat(now.minute); message.concat(":"); message.concat(now.second); message.concat(";");
+    message.concat(heaterTotalSeconds);
+    log(message);
   }
 }
 
@@ -178,7 +347,7 @@ void updateMainMenu(){
 void handleRotaryEncoder(){
   while(rotating){
     delay(ROTARY_DELAY);
-    if (digitalRead(ROTARY_PIN_B) == digitalRead(ROTARY_PIN_B)){
+    if (digitalRead(ROTARY_B_PIN) == digitalRead(ROTARY_B_PIN)){
       if(!rotaryFlag){
         //CW
         rotaryFlag = true;
@@ -314,7 +483,7 @@ void handleShutoffButton(){
 }
 
 /**
-INIT MODULES
+* INIT MODULES
 **/
 
 void initMenuItems(){
@@ -363,13 +532,13 @@ void initShutoffButton(){
 }
 
 void initRotaryEncoder(){
-  pinMode(ROTARY_PIN_A, INPUT);
-  pinMode(ROTARY_PIN_B, INPUT);
-  attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_A), rotEncoder, CHANGE);
+  pinMode(ROTARY_A_PIN, INPUT);
+  pinMode(ROTARY_B_PIN, INPUT);
+  attachInterrupt(digitalPinToInterrupt(ROTARY_A_PIN), rotEncoder, CHANGE);
 }
 
 /**
-MAIN METHODS
+* MAIN METHODS
 **/
 
 void setup()
