@@ -13,13 +13,13 @@
 */
 
 #include "Arduino.h"
+#include <dht.h>
 
 /**
 * ANALOG PINS
 **/
 
 #define ENVIRONMENTAL_LIGHT_SENSOR_PIN 0
-#define TEMPERATURE_SENSOR_PIN 1
 
 /**
 * DIGITAL PINS
@@ -42,9 +42,26 @@
 #define LIGHT_MODE_SWITCH_ON_PIN 13
 #define LIGHT_RELAY_PIN 14
 
+#define TEMP_HUM_DIGITAL_SENSOR_PIN 15
+
 #define ENTER_BUTTON_PIN 18 //ISR Pin 5
 #define CANCEL_BUTTON_PIN 19 //ISR Pin 4
 #define SHUTOFF_BUTTON_PIN 20 //ISR Pin 3
+
+/**
+* SYSTEM NAMES
+**/
+
+#define HEATER_SYSTEM_NAME "HEATER"
+#define TEMP_HUM_SYSTEM_NAME "TEMP/HUM"
+
+/**
+* TEMPERATURE VARIABLES
+**/
+
+#define TEMP_HUM_READING_INTERVAL 60000
+dht DHT;
+long lastTempLectureMillis;
 
 /**
 * DATETIME VARIABLES
@@ -125,6 +142,7 @@ boolean displayOn = true;
 **/
 
 Datetime getDateTime(){
+  //TODO Getting time properly from the clock
   Datetime now;
   now.day = 1;
   now.month = 1;
@@ -139,9 +157,13 @@ Datetime getDateTime(){
 * LOG METHODS
 **/
 
-void log(String message){
-  String log = "LOGGED: ";
+void log(String systemName, String message){
+  String log = systemName;
+  Datetime now = getDateTime();
+  log.concat(now.day); log.concat("/"); log.concat(now.month); log.concat("/"); log.concat(now.year); log.concat(" ");
+  log.concat(now.hour); log.concat(":"); log.concat(now.minute); log.concat(":"); log.concat(now.second); log.concat(";");
   log.concat(message);
+
   Serial.println(log);
 
   //TODO
@@ -169,6 +191,76 @@ void turnOffDisplay(){
     //Turn display off
     displayOn = false;
   }
+}
+
+/**
+* Internal method. Checks if it is necessary to make a new reading of the
+* temperature / humidity or if it is allowed to use the last reading values.
+* args: bool force. False means that the last reading values could be used if it
+* is allowed. True means to force a new reading.
+* return: 0 Ok, -1 Checksum error, -2 timeout.
+*/
+int readTempHum(bool force){
+  long now = millis();
+  int result = 0;
+  if(force || (now - lastTempLectureMillis)>=TEMP_HUM_READING_INTERVAL){
+    result = DHT.read11(TEMP_HUM_DIGITAL_SENSOR_PIN);
+    lastTempLectureMillis = now;
+  }
+
+  return result;
+}
+
+/**
+* TEMPERATURE / HUMIDITY SENSOR METHODS
+**/
+
+/**
+* Reads the temperature from the digital sensor.
+* args: bool force - If false returns the stored value from the previous reading
+* if it is not older than TEMP_HUM_READING_INTERVAL seconds, otherwise it does a
+* new reading and return the result. If the arg is true, makes a new reading no
+* matter when was the last one.
+*return: The temperature in Celsius
+*/
+float readTemperature(bool force){
+  int value = readTempHum(force);
+  switch(value){
+    case -2://TIMEOUT
+      log(TEMP_HUM_SYSTEM_NAME, "Timeout error occured");
+      break;
+    case -1://CHECKSUM error
+      log(TEMP_HUM_SYSTEM_NAME, "Checksum error occured");
+      break;
+    case 0://OK
+      break;
+  }
+
+  return DHT.temperature;
+}
+
+/**
+* Reads the humidity from the digital sensor.
+* args: bool force - If false returns the stored value from the previous reading
+* if it is not older than TEMP_HUM_READING_INTERVAL seconds, otherwise it does a
+* new reading and return the result. If the arg is true, makes a new reading no
+* matter when was the last one.
+*return: The humidity expressed in %
+*/
+float readHumidity(bool force){
+  int value = readTempHum(force);
+  switch(value){
+    case -2://TIMEOUT
+      log(TEMP_HUM_SYSTEM_NAME, "Timeout error occured");
+      break;
+    case -1://CHECKSUM error
+      log(TEMP_HUM_SYSTEM_NAME, "Checksum error occured");
+      break;
+    case 0://OK
+      break;
+  }
+
+  return DHT.humidity;
 }
 
 /**
@@ -206,7 +298,6 @@ void turnOnHeater(){
     digitalWrite(HEATER_RELAY_PIN, HIGH);
     startHeaterTimeTracking();
 
-    Datetime now = getDateTime();
     String mode;
     switch(getHeaterMode()){
       case HEATER_MODE_AUTO:
@@ -220,12 +311,10 @@ void turnOnHeater(){
         break;
     }
 
-    String message = "HEATER;";
-    message.concat(mode); message.concat(";");message.concat("ON;");
-    message.concat(now.day); message.concat("/"); message.concat(now.month); message.concat("/"); message.concat(now.year); message.concat(" ");
-    message.concat(now.hour); message.concat(":"); message.concat(now.minute); message.concat(":"); message.concat(now.second); message.concat(";");
+    String message = "";
+    message.concat(mode); message.concat("#");message.concat("ON#");
     message.concat(heaterTotalSeconds);
-    log(message);
+    log(HEATER_SYSTEM_NAME, message);
   }
 }
 
@@ -234,7 +323,6 @@ void turnOffHeater(){
     digitalWrite(HEATER_RELAY_PIN, LOW);
     stopHeaterTimeTracking();
 
-    Datetime now = getDateTime();
     String mode;
     switch(getHeaterMode()){
       case HEATER_MODE_AUTO:
@@ -248,12 +336,10 @@ void turnOffHeater(){
         break;
     }
 
-    String message = "HEATER;";
-    message.concat(mode); message.concat(";");message.concat("OFF;");
-    message.concat(now.day); message.concat("/"); message.concat(now.month); message.concat("/"); message.concat(now.year); message.concat(" ");
-    message.concat(now.hour); message.concat(":"); message.concat(now.minute); message.concat(":"); message.concat(now.second); message.concat(";");
+    String message = "";
+    message.concat(mode); message.concat("#");message.concat("OFF#");
     message.concat(heaterTotalSeconds);
-    log(message);
+    log(HEATER_SYSTEM_NAME, message);
   }
 }
 
@@ -422,7 +508,7 @@ void executeShutOffButton(){
 /**
 * Generic method to handle the pulsation of any button. The method receives the
 * button pin and executes the proper method.
-* args: buttonPin - The button pin which has triggered this method.
+* args: int buttonPin - The button pin which has triggered this method.
 * return: none
 */
 void handleButton(int buttonPin){
@@ -537,6 +623,10 @@ void initRotaryEncoder(){
   attachInterrupt(digitalPinToInterrupt(ROTARY_A_PIN), rotEncoder, CHANGE);
 }
 
+void initTempHumSensor(){
+  lastTempLectureMillis = 0;
+}
+
 /**
 * MAIN METHODS
 **/
@@ -546,13 +636,20 @@ void setup()
   Serial.begin(9600);
   Serial.println("INIT");
 
-  initMenuItems();
+  /*initMenuItems();
   initRotaryEncoder();
   initEnterButton();
   initShutoffButton();
+  initTempHumSensor();*/
 }
 
 void loop()
 {
-  handleRotaryEncoder();
+  //handleRotaryEncoder();
+  int value = analogRead(0);
+  float millivolts = (value / 1024.0) * 5000;
+  float celsius = millivolts / 10; // sensor output is 10mV per degree Celsius
+  Serial.print(celsius);
+  Serial.println(" degrees Celsius, ");
+  delay(2000);
 }
