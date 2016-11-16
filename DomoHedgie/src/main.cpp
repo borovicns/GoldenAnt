@@ -59,6 +59,8 @@
 * TEMPERATURE VARIABLES
 **/
 
+//I.A.W. the DHT11 datasheet, the minimum interval between reading is 1000ms
+//so the value of TEMP_HUM_READING_INTERVAL must be greater or equal to 1000 ms
 #define TEMP_HUM_READING_INTERVAL 60000
 dht DHT;
 long lastTempLectureMillis;
