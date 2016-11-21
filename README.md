@@ -10,3 +10,4 @@ Personal repository for my Arduino projects. Please visit the [wiki](../../wiki)
 
   * [Rotary encoder](../../wiki/Rotary encoder) - Explanation about how to use a rotary encoder with 3 pins (ACB) with Arduino.
   * [Pushbutton](../../wiki/Pushbutton) - Explanation about how to use a pushbutton with an external resistor.
+  * [DHT11] (../../wiki/DHT11 Temperature and humidity sensor) - Temperature and humidity sensor, 3 Pins Keyes version.
