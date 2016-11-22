@@ -62,6 +62,8 @@
 //I.A.W. the DHT11 datasheet, the minimum interval between reading is 1000ms
 //so the value of TEMP_HUM_READING_INTERVAL must be greater or equal to 1000 ms
 #define TEMP_HUM_READING_INTERVAL 60000
+#define MIN_TEMP_HUM_READING_INTERVAL 1000
+#define MEASUREMENT_ATTEMPTS 5
 dht DHT;
 long lastTempLectureMillis;
 
@@ -122,7 +124,7 @@ bool rotaryFlag = false;
 **/
 
 boolean heaterOn = false;
-int currentTemp;
+int selectedTemp;
 long millisHeater;
 float heaterTotalSeconds;
 #define MIN_TEMP_ALLOWED 23
@@ -131,7 +133,14 @@ float heaterTotalSeconds;
 #define HEATER_MODE_AUTO 1
 #define HEATER_MODE_OFF 2
 #define HEATER_MODE_ON 3
+#define HEATER_SAFE_MODE 4
+
+#define HEATER_SAFE_MODE_NIGHTTIME_ON 3600000
+#define HEATER_SAFE_MODE_NIGHTTIME_OFF 1800000
+#define HEATER_SAFE_MODE_DAYTIME_ON 1800000
+#define HEATER_SAFE_MODE_DAYTIME_OFF 7200000
 int heaterMode;
+long millisSafeMode;
 
 /**
 * GRAPHIC VARIABLES
@@ -162,8 +171,13 @@ Datetime getDateTime(){
 void log(String systemName, String message){
   String log = systemName;
   Datetime now = getDateTime();
-  log.concat(now.day); log.concat("/"); log.concat(now.month); log.concat("/"); log.concat(now.year); log.concat(" ");
-  log.concat(now.hour); log.concat(":"); log.concat(now.minute); log.concat(":"); log.concat(now.second); log.concat(";");
+  log.concat(now.day); log.concat("/");
+  log.concat(now.month); log.concat("/");
+  log.concat(now.year); log.concat(" ");
+
+  log.concat(now.hour); log.concat(":");
+  log.concat(now.minute); log.concat(":");
+  log.concat(now.second); log.concat(";");
   log.concat(message);
 
   Serial.println(log);
@@ -200,14 +214,26 @@ void turnOffDisplay(){
 * temperature / humidity or if it is allowed to use the last reading values.
 * args: bool force. False means that the last reading values could be used if it
 * is allowed. True means to force a new reading.
+* args: long millis. Current millis to check if it is necessary to make a new
+* reading depending on when the last reading was.
 * return: 0 Ok, -1 Checksum error, -2 timeout.
 */
-int readTempHum(bool force){
-  long now = millis();
+int readTempHum(bool force, long millis){
   int result = 0;
-  if(force || (now - lastTempLectureMillis)>=TEMP_HUM_READING_INTERVAL){
+  if(force || (millis - lastTempLectureMillis)>=MIN_TEMP_HUM_READING_INTERVAL){
     result = DHT.read11(TEMP_HUM_DIGITAL_SENSOR_PIN);
-    lastTempLectureMillis = now;
+    lastTempLectureMillis = millis;
+
+    switch(result){
+      case -2://TIMEOUT
+        log(TEMP_HUM_SYSTEM_NAME, "Timeout error occured");
+        break;
+      case -1://CHECKSUM error
+        log(TEMP_HUM_SYSTEM_NAME, "Checksum error occured");
+        break;
+      case 0://OK
+        break;
+    }
   }
 
   return result;
@@ -218,51 +244,47 @@ int readTempHum(bool force){
 **/
 
 /**
-* Reads the temperature from the digital sensor.
-* args: bool force - If false returns the stored value from the previous reading
-* if it is not older than TEMP_HUM_READING_INTERVAL seconds, otherwise it does a
-* new reading and return the result. If the arg is true, makes a new reading no
-* matter when was the last one.
+* Gets the temperature from the digital sensor.
+* args: none
 *return: The temperature in Celsius
 */
-float readTemperature(bool force){
-  int value = readTempHum(force);
-  switch(value){
-    case -2://TIMEOUT
-      log(TEMP_HUM_SYSTEM_NAME, "Timeout error occured");
-      break;
-    case -1://CHECKSUM error
-      log(TEMP_HUM_SYSTEM_NAME, "Checksum error occured");
-      break;
-    case 0://OK
-      break;
-  }
-
-  return DHT.temperature;
+float getTemperature(){
+    return DHT.temperature;
 }
 
 /**
-* Reads the humidity from the digital sensor.
-* args: bool force - If false returns the stored value from the previous reading
-* if it is not older than TEMP_HUM_READING_INTERVAL seconds, otherwise it does a
-* new reading and return the result. If the arg is true, makes a new reading no
-* matter when was the last one.
+* Gets the humidity from the digital sensor.
+* args: none
 *return: The humidity expressed in %
 */
-float readHumidity(bool force){
-  int value = readTempHum(force);
-  switch(value){
-    case -2://TIMEOUT
-      log(TEMP_HUM_SYSTEM_NAME, "Timeout error occured");
-      break;
-    case -1://CHECKSUM error
-      log(TEMP_HUM_SYSTEM_NAME, "Checksum error occured");
-      break;
-    case 0://OK
-      break;
-  }
-
+float getHumidity(){
   return DHT.humidity;
+}
+
+void handleTempHumSensor(long millis){
+  bool flag = true;
+  if((millis - lastTempLectureMillis) >= TEMP_HUM_READING_INTERVAL){
+    if(readTempHum(false, millis)!=0){
+      //ERROR DURING TEMPERATURE AND HUMIDITY MEASUREMENT
+      int attempts = 0;
+      flag = false;
+      while(attempts<MEASUREMENT_ATTEMPTS && !flag){
+        attempts++;
+        delay(3000);
+        if(readTempHum(true, millis)==0) flag = true;
+      }
+    }
+
+    if(!flag){
+      //TODO Not possible temperature and humidity measurement.
+      //Suggest to reboot the device.
+      //Put the heater in safety mode
+      heaterMode = HEATER_SAFE_MODE;
+      log(TEMP_HUM_SYSTEM_NAME, "Safe mode activated");
+      //Sound alarm
+      //Enter in mode alarm
+    }
+  }
 }
 
 /**
@@ -342,6 +364,72 @@ void turnOffHeater(){
     message.concat(mode); message.concat("#");message.concat("OFF#");
     message.concat(heaterTotalSeconds);
     log(HEATER_SYSTEM_NAME, message);
+  }
+}
+
+void heaterSafeMode(){
+  Datetime now = getDateTime();
+  if((now.hour>20 && now.minute>30) || (now.hour<8 && now.minute < 30)){
+    //nighttime
+    if(isHeaterOn()){
+      if(millisSafeMode > HEATER_SAFE_MODE_NIGHTTIME_ON){
+        millisSafeMode = 0;
+        turnOffHeater();
+      }
+      else{
+        millisSafeMode += (millis() - millisSafeMode);
+      }
+    }
+    else{
+      if(millisSafeMode > HEATER_SAFE_MODE_NIGHTTIME_OFF){
+        millisSafeMode = 0;
+        turnOnHeater();
+      }
+      else{
+        millisSafeMode += (millis() - millisSafeMode);
+      }
+    }
+  }
+  else{
+    //daytime
+    if(isHeaterOn()){
+      if(millisSafeMode > HEATER_SAFE_MODE_DAYTIME_ON){
+        millisSafeMode = 0;
+        turnOffHeater();
+      }
+      else{
+        millisSafeMode += (millis() - millisSafeMode);
+      }
+    }
+    else{
+      if(millisSafeMode > HEATER_SAFE_MODE_DAYTIME_OFF){
+        millisSafeMode = 0;
+        turnOnHeater();
+      }
+      else{
+        millisSafeMode += (millis() - millisSafeMode);
+      }
+    }
+  }
+}
+
+void handleHeater(){
+  switch(getHeaterMode()){
+    case HEATER_MODE_AUTO:
+      if(selectedTemp > getTemperature()) turnOnHeater();
+      else turnOffHeater();
+      break;
+    case HEATER_MODE_ON:
+      if(MAX_TEMP_ALLOWED > getTemperature()) turnOnHeater();
+      else turnOffHeater();
+      break;
+    case HEATER_MODE_OFF:
+      turnOffHeater();
+      break;
+    case HEATER_SAFE_MODE:
+      //TODO Announce safe mode on the display
+      heaterSafeMode();
+      break;
   }
 }
 
@@ -625,6 +713,16 @@ void initRotaryEncoder(){
   attachInterrupt(digitalPinToInterrupt(ROTARY_A_PIN), rotEncoder, CHANGE);
 }
 
+void initHeater(){
+  selectedTemp = (MAX_TEMP_ALLOWED+MIN_TEMP_ALLOWED)/2;
+  millisHeater = 0;
+  heaterTotalSeconds = 0;
+  millisSafeMode = 0;
+
+  //TODO
+  //Read the position of the Heater mode switch and act in consequence
+}
+
 void initTempHumSensor(){
   lastTempLectureMillis = 0;
 }
@@ -638,20 +736,19 @@ void setup()
   Serial.begin(9600);
   Serial.println("INIT");
 
-  /*initMenuItems();
+  initMenuItems();
   initRotaryEncoder();
   initEnterButton();
   initShutoffButton();
-  initTempHumSensor();*/
+  initHeater();
+  initTempHumSensor();
 }
 
 void loop()
 {
-  //handleRotaryEncoder();
-  int value = analogRead(0);
-  float millivolts = (value / 1024.0) * 5000;
-  float celsius = millivolts / 10; // sensor output is 10mV per degree Celsius
-  Serial.print(celsius);
-  Serial.println(" degrees Celsius, ");
-  delay(2000);
+  long now = millis();
+
+  handleRotaryEncoder();
+  handleTempHumSensor(now);
+  handleHeater();
 }
