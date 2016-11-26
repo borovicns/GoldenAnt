@@ -14,6 +14,8 @@
 
 #include "Arduino.h"
 #include <dht.h>
+#include <Wire.h>
+#include "RTClib.h"
 
 /**
 * ANALOG PINS
@@ -44,9 +46,12 @@
 
 #define TEMP_HUM_DIGITAL_SENSOR_PIN 15
 
+#define SHUTOFF_BUTTON_PIN 16
 #define ENTER_BUTTON_PIN 18 //ISR Pin 5
 #define CANCEL_BUTTON_PIN 19 //ISR Pin 4
-#define SHUTOFF_BUTTON_PIN 20 //ISR Pin 3
+
+#define CLOCK_SDA_PIN 20
+#define CLOCK_SCL_PIN 21
 
 /**
 * SYSTEM NAMES
@@ -54,6 +59,7 @@
 
 #define HEATER_SYSTEM_NAME "HEATER"
 #define TEMP_HUM_SYSTEM_NAME "TEMP/HUM"
+#define RTC_SYSTEM_NAME "RTC"
 
 /**
 * TEMPERATURE VARIABLES
@@ -80,6 +86,8 @@ struct Datetime{
   int minute;
   int second;
 };
+
+RTC_DS1307 RTC; // Tiny RTC Module
 
 /**
 * MENU VARIABLES
@@ -153,22 +161,58 @@ boolean displayOn = true;
 **/
 
 Datetime getDateTime(){
-  //TODO Getting time properly from the clock
-  Datetime now;
-  now.day = 1;
-  now.month = 1;
-  now.year = 1970;
+  DateTime rtcTime = RTC.now();
+  Datetime myTime;
+  myTime.day = rtcTime.day();
+  myTime.month = rtcTime.month();
+  myTime.year = rtcTime.year();
+  myTime.hour = rtcTime.hour();
+  myTime.minute = rtcTime.minute();
+  myTime.second = rtcTime.second();
 
-  now.hour = now.minute = now.second = 0;
+  return myTime;
+}
 
-  return now;
+String datetimeToString(Datetime date){
+  String s = "";
+  if(date.day>=1 && date.day<=9) s.concat("0");
+  s.concat(date.day);
+  s.concat("/");
+  if(date.month>=1 && date.month<=9) s.concat("0");
+  s.concat(date.month);
+  s.concat("/");
+  s.concat(date.year);
+  s.concat(" ");
+
+  if(date.hour>=0 && date.hour<=9) s.concat("0");
+  s.concat(date.hour);
+  s.concat(":");
+  if(date.minute>=0 && date.minute<=9) s.concat("0");
+  s.concat(date.minute);
+  s.concat(":");
+  if(date.second>=0 && date.second<=9) s.concat("0");
+  s.concat(date.second);
+
+  return s;
+}
+
+void setDateTime(Datetime now){
+  //Datetime oldDate = getDateTime();
+  DateTime rtcTime = DateTime(now.year, now.month, now.day, now.hour, now.minute, now.second);
+  RTC.adjust(rtcTime);
+  /*String message = "Date and time changed from \"";
+  message.concat(datetimeToString(oldDate));
+  message.concat("\" to \"");
+  message.concat(datetimeToString(getDateTime()));
+  message.concat("\"");
+  logMessage(RTC_SYSTEM_NAME, message);*/
 }
 
 /**
 * LOG METHODS
 **/
 
-void log(String systemName, String message){
+void logMessage(String systemName, String message){
   String log = systemName;
   Datetime now = getDateTime();
   log.concat(now.day); log.concat("/");
@@ -226,10 +270,10 @@ int readTempHum(bool force, long millis){
 
     switch(result){
       case -2://TIMEOUT
-        log(TEMP_HUM_SYSTEM_NAME, "Timeout error occured");
+        logMessage(TEMP_HUM_SYSTEM_NAME, "Timeout error occured");
         break;
       case -1://CHECKSUM error
-        log(TEMP_HUM_SYSTEM_NAME, "Checksum error occured");
+        logMessage(TEMP_HUM_SYSTEM_NAME, "Checksum error occured");
         break;
       case 0://OK
         break;
@@ -280,7 +324,7 @@ void handleTempHumSensor(long millis){
       //Suggest to reboot the device.
       //Put the heater in safety mode
       heaterMode = HEATER_SAFE_MODE;
-      log(TEMP_HUM_SYSTEM_NAME, "Safe mode activated");
+      logMessage(TEMP_HUM_SYSTEM_NAME, "Safe mode activated");
       //Sound alarm
       //Enter in mode alarm
     }
@@ -338,7 +382,7 @@ void turnOnHeater(){
     String message = "";
     message.concat(mode); message.concat("#");message.concat("ON#");
     message.concat(heaterTotalSeconds);
-    log(HEATER_SYSTEM_NAME, message);
+    logMessage(HEATER_SYSTEM_NAME, message);
   }
 }
 
@@ -363,7 +407,7 @@ void turnOffHeater(){
     String message = "";
     message.concat(mode); message.concat("#");message.concat("OFF#");
     message.concat(heaterTotalSeconds);
-    log(HEATER_SYSTEM_NAME, message);
+    logMessage(HEATER_SYSTEM_NAME, message);
   }
 }
 
@@ -694,23 +738,39 @@ void initMenuItems(){
 
 void initEnterButton(){
   pinMode(ENTER_BUTTON_PIN, INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENTER_BUTTON_PIN), handleEnterButton, LOW);
+  attachInterrupt(
+    digitalPinToInterrupt(ENTER_BUTTON_PIN),
+    handleEnterButton,
+    LOW
+  );
 }
 
 void initCancelButton(){
   pinMode(CANCEL_BUTTON_PIN, INPUT);
-  attachInterrupt(digitalPinToInterrupt(CANCEL_BUTTON_PIN), handleCancelButton, LOW);
+  attachInterrupt(
+    digitalPinToInterrupt(CANCEL_BUTTON_PIN),
+    handleCancelButton,
+    LOW
+  );
 }
 
 void initShutoffButton(){
   pinMode(SHUTOFF_BUTTON_PIN, INPUT);
-  attachInterrupt(digitalPinToInterrupt(SHUTOFF_BUTTON_PIN), handleShutoffButton, LOW);
+  attachInterrupt(
+    digitalPinToInterrupt(SHUTOFF_BUTTON_PIN),
+    handleShutoffButton,
+    LOW
+  );
 }
 
 void initRotaryEncoder(){
   pinMode(ROTARY_A_PIN, INPUT);
   pinMode(ROTARY_B_PIN, INPUT);
-  attachInterrupt(digitalPinToInterrupt(ROTARY_A_PIN), rotEncoder, CHANGE);
+  attachInterrupt(
+    digitalPinToInterrupt(ROTARY_A_PIN),
+    rotEncoder,
+    CHANGE
+  );
 }
 
 void initHeater(){
@@ -725,6 +785,15 @@ void initHeater(){
 
 void initTempHumSensor(){
   lastTempLectureMillis = 0;
+}
+
+void initRTC(){
+  Wire.begin();
+  RTC.begin();
+
+  /*if (! RTC.isrunning()) {
+    RTC.adjust(DateTime(__DATE__, __TIME__));
+  }*/
 }
 
 /**
@@ -742,6 +811,7 @@ void setup()
   initShutoffButton();
   initHeater();
   initTempHumSensor();
+  initRTC();
 }
 
 void loop()
