@@ -16,6 +16,7 @@
 #include <dht.h>
 #include <Wire.h>
 #include "RTClib.h"
+#include <TFT_HX8357.h>
 
 /**
 * ANALOG PINS
@@ -34,24 +35,37 @@
 #define LED_LOW_TEMPERATURE_PIN 5 //PWM Pin
 #define LED_LIGHT_ON_PIN 6 //PWM Pin
 
-#define HEATER_MODE_SWITCH_AUTO_PIN 7
-#define HEATER_MODE_SWITCH_OFF_PIN 8
-#define HEATER_MODE_SWITCH_ON_PIN 9
-#define HEATER_RELAY_PIN 10
+#define MULTIPLEXER_S0_PIN 7
+#define MULTIPLEXER_S1_PIN 8
+#define MULTIPLEXER_S2_PIN 9
+const int MULTIPLEXER_S_PINS[] = {MULTIPLEXER_S0_PIN, MULTIPLEXER_S1_PIN, MULTIPLEXER_S2_PIN};
+#define MULTIPLEXER_Z_PIN 10
 
-#define LIGHT_MODE_SWITCH_AUTO_PIN 11
-#define LIGHT_MODE_SWITCH_OFF_PIN 12
-#define LIGHT_MODE_SWITCH_ON_PIN 13
-#define LIGHT_RELAY_PIN 14
+#define HEATER_RELAY_PIN 11
+#define LIGHT_RELAY_PIN 12
 
 #define TEMP_HUM_DIGITAL_SENSOR_PIN 15
 
-#define SHUTOFF_BUTTON_PIN 16
+
 #define ENTER_BUTTON_PIN 18 //ISR Pin 5
 #define CANCEL_BUTTON_PIN 19 //ISR Pin 4
 
 #define CLOCK_SDA_PIN 20
 #define CLOCK_SCL_PIN 21
+
+/**
+* MULTIPLEXER INPUTS
+**/
+#define MULTIPLEXER_INPUT_NUM 3
+#define HEATER_MODE_SWITCH_AUTO_MUX_INPUT 0
+#define HEATER_MODE_SWITCH_OFF_MUX_INPUT 1
+#define HEATER_MODE_SWITCH_ON_MUX_INPUT 2
+
+#define LIGHT_MODE_SWITCH_AUTO_MUX_INPUT 3
+#define LIGHT_MODE_SWITCH_OFF_MUX_INPUT 4
+#define LIGHT_MODE_SWITCH_ON_MUX_INPUT 5
+
+#define SHUTOFF_BUTTON_MUX_INPUT 6
 
 /**
 * SYSTEM NAMES
@@ -60,6 +74,13 @@
 #define HEATER_SYSTEM_NAME "HEATER"
 #define TEMP_HUM_SYSTEM_NAME "TEMP/HUM"
 #define RTC_SYSTEM_NAME "RTC"
+
+/**
+* LOG VARIABLES
+**/
+#define INFO_MESSAGE 1
+#define WARNING_MESSAGE 2
+#define ERROR_MESSAGE 3
 
 /**
 * TEMPERATURE VARIABLES
@@ -155,6 +176,18 @@ long millisSafeMode;
 */
 
 boolean displayOn = true;
+TFT_HX8357 tft = new TFT_HX8357(480, 320);
+const uint16_t backgroundDisplay = TFT_NAVY;
+#define TFT_HEIGHT 320
+#define TFT_WIDTH 480
+//CLOCK
+uint32_t targetTime = 0;
+uint8_t hh = 0, mm = 0, ss = 0;//TEMP TIME
+byte omm = 99, oss = 99;
+byte xcolon = 0;
+int  xsecs = 0;
+unsigned int colour = 0;
+int clockTextSize = 4;
 
 /**
 * DATETIME METHODS
@@ -233,6 +266,10 @@ void logMessage(String systemName, String message){
 * GRAPHIC METHODS
 */
 
+void cleanScreen(){
+  tft.fillScreen(backgroundDisplay);
+}
+
 boolean isDisplayOn(){
   return displayOn;
 }
@@ -252,6 +289,117 @@ void turnOffDisplay(){
     displayOn = false;
   }
 }
+
+void updateScreenClock(){
+  if (targetTime < millis()) {
+    // Set next update for 1 second later
+    targetTime = millis() + 1000;
+
+    // Adjust the time values by adding 1 second
+    ss++;              // Advance second
+    if (ss == 60) {    // Check for roll-over
+      ss = 0;          // Reset seconds to zero
+      omm = mm;        // Save last minute time for display update
+      mm++;            // Advance minute
+      if (mm > 59) {   // Check for roll-over
+        mm = 0;
+        hh++;          // Advance hour
+        if (hh > 23) { // Check for 24hr roll-over (could roll-over on 13)
+          hh = 0;      // 0 for 24 hour clock, set to 1 for 12 hour clock
+        }
+      }
+    }
+
+    // Update digital time
+    int xpos =250;
+    int ypos = 20; // Top left corner of clock text, about half way down
+    //int ysecs = ypos + 24;
+    int ysecs = ypos + 0;
+
+    if (omm != mm) { // Redraw hours and minutes time every minute
+      omm = mm;
+      // Draw hours and minutes
+      if (hh < 10) xpos += tft.drawChar('0', xpos, ypos, clockTextSize); // Add hours leading zero for 24 hr clock
+      xpos += tft.drawNumber(hh, xpos, ypos, clockTextSize);             // Draw hours
+      xcolon = xpos; // Save colon coord for later to flash on/off later
+      xpos += tft.drawChar(':', xpos, ypos - 8, clockTextSize);
+      if (mm < 10) xpos += tft.drawChar('0', xpos, ypos, clockTextSize); // Add minutes leading zero
+      xpos += tft.drawNumber(mm, xpos, ypos, clockTextSize);             // Draw minutes
+      xsecs = xpos; // Save seconds 'x' position for later display updates
+    }
+    if (oss != ss) { // Redraw seconds time every second
+      oss = ss;
+      xpos = xsecs;
+
+      if (ss % 2) { // Flash the colons on/off
+        tft.setTextColor(TFT_WHITE, backgroundDisplay);        // Set colour to grey to dim colon
+        tft.drawChar(':', xcolon, ypos - 8, clockTextSize);     // Hour:minute colon
+        xpos += tft.drawChar(':', xsecs, ysecs, clockTextSize); // Seconds colon
+        tft.setTextColor(TFT_YELLOW, TFT_BLACK);    // Set colour back to yellow
+      }
+      else {
+        tft.drawChar(':', xcolon, ypos - 8, clockTextSize);     // Hour:minute colon
+        xpos += tft.drawChar(':', xsecs, ysecs, clockTextSize); // Seconds colon
+      }
+
+      //Draw seconds
+      if (ss < 10) xpos += tft.drawChar('0', xpos, ysecs, clockTextSize); // Add leading zero
+      tft.drawNumber(ss, xpos, ysecs, clockTextSize);                     // Draw seconds
+    }
+  }
+}
+
+void updateMainScreen(){
+  int relPosXTemp = 0;
+  int relPosYTemp = 106;
+
+  tft.fillRect(relPosXTemp, relPosYTemp, TFT_WIDTH, 3, TFT_ORANGE);
+  /*
+  int16_t  x1, y1;
+  uint16_t w, h;
+  tft.getTextBounds("Temperature", 5, 90, &x1, &y1, &w, &h);
+  tft.fillRoundRect(5, 90, w, h, 3, TFT_ORANGE);
+  */
+
+  tft.fillRoundRect(relPosXTemp+5, relPosYTemp-182, 134, 20, 3, TFT_ORANGE);
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(relPosXTemp+7, relPosYTemp-14);
+  tft.setTextSize(2);
+  tft.print("Temperatura");
+
+  int relPosXLight = 0;
+  int relPosYLight = 212;
+
+  tft.fillRect(relPosXLight, relPosYLight, TFT_WIDTH, 3, TFT_ORANGE);
+  /*
+  int16_t  x1, y1;
+  uint16_t w, h;
+  tft.getTextBounds("Light", 5, 90, &x1, &y1, &w, &h);
+  tft.fillRoundRect(5, 90, w, h, 3, TFT_ORANGE);
+  */
+
+  tft.fillRect(relPosXLight+5, relPosYLight-16, 134, 16, TFT_ORANGE);
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(relPosXLight+7, relPosYLight-14);
+  tft.setTextSize(2);
+  tft.print("Luz");
+}
+
+/**
+* MULTIPLEXER METHODS
+**/
+
+int getMuxInputState(int input){
+  for(int i=0;i<MULTIPLEXER_INPUT_NUM;i++){
+    digitalWrite(MULTIPLEXER_S_PINS[i], bitRead(input, i));
+  }
+
+  return digitalRead(MULTIPLEXER_Z_PIN);
+}
+
+/**
+* TEMPERATURE / HUMIDITY SENSOR METHODS
+**/
 
 /**
 * Internal method. Checks if it is necessary to make a new reading of the
@@ -282,10 +430,6 @@ int readTempHum(bool force, long millis){
 
   return result;
 }
-
-/**
-* TEMPERATURE / HUMIDITY SENSOR METHODS
-**/
 
 /**
 * Gets the temperature from the digital sensor.
@@ -358,6 +502,11 @@ boolean isHeaterOn(){
 }
 
 int getHeaterMode(){
+  if(heaterMode != HEATER_SAFE_MODE){
+    if(getMuxInputState(HEATER_MODE_SWITCH_AUTO_MUX_INPUT) == LOW) heaterMode = HEATER_MODE_AUTO;
+    else if(getMuxInputState(HEATER_MODE_SWITCH_OFF_MUX_INPUT) == LOW) heaterMode = HEATER_MODE_OFF;
+    else if(getMuxInputState(HEATER_MODE_SWITCH_ON_MUX_INPUT) == LOW) heaterMode = HEATER_MODE_ON;
+  }
   return heaterMode;
 }
 
@@ -667,9 +816,6 @@ void handleButton(int buttonPin){
         case CANCEL_BUTTON_PIN:
           executeCancelButton();
           break;
-        case SHUTOFF_BUTTON_PIN:
-          executeShutOffButton();
-          break;
       }
     }
   }
@@ -691,15 +837,6 @@ void handleEnterButton() {
 */
 void handleCancelButton(){
   handleButton(CANCEL_BUTTON_PIN);
-}
-
-/**
-* The ISR method fot the Shut off button
-* args: none
-* return: none
-*/
-void handleShutoffButton(){
-  handleButton(SHUTOFF_BUTTON_PIN);
 }
 
 /**
@@ -754,15 +891,6 @@ void initCancelButton(){
   );
 }
 
-void initShutoffButton(){
-  pinMode(SHUTOFF_BUTTON_PIN, INPUT);
-  attachInterrupt(
-    digitalPinToInterrupt(SHUTOFF_BUTTON_PIN),
-    handleShutoffButton,
-    LOW
-  );
-}
-
 void initRotaryEncoder(){
   pinMode(ROTARY_A_PIN, INPUT);
   pinMode(ROTARY_B_PIN, INPUT);
@@ -796,6 +924,15 @@ void initRTC(){
   }*/
 }
 
+void initDisplay(){
+  tft.init();
+  tft.setRotation(5);
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_DARKGREEN);
+  tft.setTextFont(1);
+  //tft.setTextSize(2);
+}
+
 /**
 * MAIN METHODS
 **/
@@ -805,20 +942,43 @@ void setup()
   Serial.begin(9600);
   Serial.println("INIT");
 
+  initDisplay();
+  /*tft.setCursor(10, 10);
+  tft.print("DISPLAY: INIT DONE");
   initMenuItems();
+  tft.setCursor(10, 40);
+  tft.print("MENU: INIT DONE");
   initRotaryEncoder();
+  tft.setCursor(10, 60);
+  tft.print("ROTARY ENCODER: INIT DONE");
   initEnterButton();
-  initShutoffButton();
+  tft.setCursor(10, 80);
+  tft.print("ENTER BUTTON: SET DONE");
+  initCancelButton();
+  tft.setCursor(10, 100);
+  tft.print("CANCEL BUTTON: SET DONE");
   initHeater();
+  tft.setCursor(10, 120);
+  tft.print("HEATER: INIT DONE");
   initTempHumSensor();
-  initRTC();
+  tft.setCursor(10, 140);
+  tft.print("TEMP / HUM SENSOR: INIT DONE");
+  //initRTC();
+  tft.setCursor(10, 160);
+  tft.print("RTC: INIT DONE");
+  delay(200);
+  */
+  cleanScreen();
+
+  updateMainScreen();
 }
 
 void loop()
 {
-  long now = millis();
+  //long now = millis();
 
-  handleRotaryEncoder();
-  handleTempHumSensor(now);
-  handleHeater();
+  //handleRotaryEncoder();
+  //handleTempHumSensor(now);
+  //handleHeater();
+  updateScreenClock();
 }
