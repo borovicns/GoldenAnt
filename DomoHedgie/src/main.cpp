@@ -13,10 +13,17 @@
 */
 
 #include "Arduino.h"
+
 #include <dht.h>
+
 #include <Wire.h>
 #include "RTClib.h"
-#include <TFT_HX8357.h>
+
+#include <SPI.h>
+#include "Adafruit_GFX.h"
+#include "Adafruit_HX8357.h"
+
+#include "i18n/DomoHedgie_i18n_es_ES.h"
 
 /**
 * ANALOG PINS
@@ -52,6 +59,10 @@ const int MULTIPLEXER_S_PINS[] = {MULTIPLEXER_S0_PIN, MULTIPLEXER_S1_PIN, MULTIP
 
 #define CLOCK_SDA_PIN 20
 #define CLOCK_SCL_PIN 21
+
+#define TFT_CS 47
+#define TFT_DC 45
+#define TFT_RST 43
 
 /**
 * MULTIPLEXER INPUTS
@@ -176,32 +187,51 @@ long millisSafeMode;
 */
 
 boolean displayOn = true;
-TFT_HX8357 tft = new TFT_HX8357(480, 320);
-const uint16_t backgroundDisplay = TFT_NAVY;
+Adafruit_HX8357 tft = Adafruit_HX8357(TFT_CS, TFT_DC, MOSI, SCK, TFT_RST, MISO);
+const uint16_t backgroundDisplay = 0x2966;
+#define TFT_DEBUG 0x03E0
+#define TFT_SEPATATOR_BAR 0xFD20
 #define TFT_HEIGHT 320
 #define TFT_WIDTH 480
+#define TFT_TEMP_OK 0x8602
+#define TFT_TEMP_HOT 0xE024
+#define TFT_TEMP_COLD 0x0E5D
+#define TFT_TEMP_OFF 0xEF5D
+#define TFT_LIGHT_ON 0x649e
+#define TFT_LIGHT_OFF 0xFFFF
 //CLOCK
 uint32_t targetTime = 0;
-uint8_t hh = 0, mm = 0, ss = 0;//TEMP TIME
+uint8_t hh = 23, mm = 59, ss = 50;//TEMP TIME
 byte omm = 99, oss = 99;
-byte xcolon = 0;
 int  xsecs = 0;
 unsigned int colour = 0;
-int clockTextSize = 4;
+const int clockTextSize = 2;
+const uint8_t clockTextFont = 1;
+int xClockColon = 0;
+//DATE
+const int dateTextSize = 2;
+const uint8_t dateTextFont = 1;
 
 /**
 * DATETIME METHODS
 **/
 
 Datetime getDateTime(){
-  DateTime rtcTime = RTC.now();
   Datetime myTime;
+  /*DateTime rtcTime = RTC.now();
   myTime.day = rtcTime.day();
   myTime.month = rtcTime.month();
   myTime.year = rtcTime.year();
   myTime.hour = rtcTime.hour();
   myTime.minute = rtcTime.minute();
-  myTime.second = rtcTime.second();
+  myTime.second = rtcTime.second();*/
+
+  myTime.day = 7;
+  myTime.month = 5;
+  myTime.year = 2016;
+  myTime.hour = 14;
+  myTime.minute = 30;
+  myTime.second = 22;
 
   return myTime;
 }
@@ -290,7 +320,27 @@ void turnOffDisplay(){
   }
 }
 
-void updateScreenClock(){
+void updateScreenDate(){
+  Datetime now = getDateTime();
+  //tft.setTextFont(dateTextFont);
+  tft.setTextSize(dateTextSize);
+  tft.setTextColor(HX8357_WHITE, backgroundDisplay);
+  int xDatePos = 342;
+  int yDatePos = 50;
+  String date = "";
+  if(now.day<10) date.concat("0");
+  date.concat(now.day);
+  date.concat(C_DATE_SEPARATOR);
+  if(now.month<10) date.concat("0");
+  date.concat(now.month);
+  date.concat(C_DATE_SEPARATOR);
+  date.concat(now.year-2000);
+  tft.setCursor(xDatePos, yDatePos);
+  tft.setTextSize(dateTextSize);
+  tft.print(date);
+}
+
+/*void updateScreenClock(){
   if (targetTime < millis()) {
     // Set next update for 1 second later
     targetTime = millis() + 1000;
@@ -306,83 +356,133 @@ void updateScreenClock(){
         hh++;          // Advance hour
         if (hh > 23) { // Check for 24hr roll-over (could roll-over on 13)
           hh = 0;      // 0 for 24 hour clock, set to 1 for 12 hour clock
+          updateScreenDate();
         }
       }
     }
 
-    // Update digital time
-    int xpos =250;
-    int ypos = 20; // Top left corner of clock text, about half way down
-    //int ysecs = ypos + 24;
-    int ysecs = ypos + 0;
+    //tft.setTextFont(clockTextFont);
+    tft.setTextSize(clockTextSize);
+    int xClockPos =350;
+    int yClockPos = 20; // Top left corner of clock text, about half way down
+    int yClockColon = yClockPos-clockTextSize;
 
+    // Update digital time
     if (omm != mm) { // Redraw hours and minutes time every minute
       omm = mm;
       // Draw hours and minutes
-      if (hh < 10) xpos += tft.drawChar('0', xpos, ypos, clockTextSize); // Add hours leading zero for 24 hr clock
-      xpos += tft.drawNumber(hh, xpos, ypos, clockTextSize);             // Draw hours
-      xcolon = xpos; // Save colon coord for later to flash on/off later
-      xpos += tft.drawChar(':', xpos, ypos - 8, clockTextSize);
-      if (mm < 10) xpos += tft.drawChar('0', xpos, ypos, clockTextSize); // Add minutes leading zero
-      xpos += tft.drawNumber(mm, xpos, ypos, clockTextSize);             // Draw minutes
-      xsecs = xpos; // Save seconds 'x' position for later display updates
+      if (hh < 10) xClockPos += tft.drawChar('0', xClockPos, yClockPos, clockTextSize); // Add hours leading zero for 24 hr clock
+      xClockPos += tft.drawNumber(hh, xClockPos, yClockPos, clockTextSize);             // Draw hours
+      xClockColon = xClockPos; // Save colon coord for later to flash on/off later
+      xClockPos += tft.drawChar(C_HOUR_SEPARATOR, xClockPos, yClockColon, clockTextSize);
+      if (mm < 10) xClockPos += tft.drawChar('0', xClockPos, yClockPos, clockTextSize); // Add minutes leading zero
+      xClockPos += tft.drawNumber(mm, xClockPos, yClockPos, clockTextSize);             // Draw minutes
+      xsecs = xClockPos; // Save seconds 'x' position for later display updates
+
     }
     if (oss != ss) { // Redraw seconds time every second
       oss = ss;
-      xpos = xsecs;
+      xClockPos = xsecs;
 
       if (ss % 2) { // Flash the colons on/off
-        tft.setTextColor(TFT_WHITE, backgroundDisplay);        // Set colour to grey to dim colon
-        tft.drawChar(':', xcolon, ypos - 8, clockTextSize);     // Hour:minute colon
-        xpos += tft.drawChar(':', xsecs, ysecs, clockTextSize); // Seconds colon
-        tft.setTextColor(TFT_YELLOW, TFT_BLACK);    // Set colour back to yellow
+        tft.setTextColor(0x39C4, backgroundDisplay);        // Set colour to grey to dim colon
+        tft.drawChar(C_HOUR_SEPARATOR, xClockColon, yClockColon, clockTextSize);     // Hour:minute colon
+        xClockPos += tft.drawChar(C_HOUR_SEPARATOR, xsecs, yClockColon, clockTextSize); // Seconds colon
+        tft.setTextColor(TFT_WHITE, backgroundDisplay);    // Set colour back to yellow
       }
       else {
-        tft.drawChar(':', xcolon, ypos - 8, clockTextSize);     // Hour:minute colon
-        xpos += tft.drawChar(':', xsecs, ysecs, clockTextSize); // Seconds colon
+        tft.drawChar(C_HOUR_SEPARATOR, xClockColon, yClockColon, clockTextSize);     // Hour:minute colon
+        xClockPos += tft.drawChar(C_HOUR_SEPARATOR, xsecs, yClockColon, clockTextSize); // Seconds colon
       }
 
       //Draw seconds
-      if (ss < 10) xpos += tft.drawChar('0', xpos, ysecs, clockTextSize); // Add leading zero
-      tft.drawNumber(ss, xpos, ysecs, clockTextSize);                     // Draw seconds
+      if (ss < 10) xClockPos += tft.drawChar('0', xClockPos, yClockPos, clockTextSize); // Add leading zero
+      tft.drawNumber(ss, xClockPos, yClockPos, clockTextSize);                     // Draw seconds
     }
   }
+}*/
+
+void paintGradient(int x, int y, int lines, uint16_t initialColour, uint16_t finalColour){
+  /*uint8_t initialRed = ((initialColour >> 11) & 0x1F);
+  uint8_t initialGreen = ((initialColour >> 5) & 0x3F);
+  uint8_t initialBlue = (initialColour & 0x1F);*/
+  double gradientHeight = (double)lines;
+
+  double ini = ((initialColour >> 11) & 0x1F);
+  double fin = ((finalColour >> 11) & 0x1F);
+  double redLeap = (fin-ini)/gradientHeight;
+
+  ini = ((initialColour >> 5) & 0x3F);
+  fin = ((finalColour >> 5) & 0x3F);
+  double greenLeap = (fin-ini)/gradientHeight;
+
+  ini = (initialColour & 0x1F);
+  fin = (finalColour & 0x1F);
+  double blueLeap = (fin-ini)/gradientHeight;
+
+  for(int i=0;i<gradientHeight-1;i++){
+    int red = ((initialColour >> 11) & 0x1F) + ((int)(redLeap*i));
+    int green = ((initialColour >> 5) & 0x3F) + ((int)(greenLeap*i));
+    int blue = (initialColour & 0x1F) + ((int)(blueLeap*i));
+    tft.drawFastHLine(x, y-i, TFT_WIDTH, red << 11 | green << 5 | blue);
+  }
+  tft.drawFastHLine(x, y-gradientHeight, TFT_WIDTH, finalColour);
 }
 
 void updateMainScreen(){
   int relPosXTemp = 0;
   int relPosYTemp = 106;
-
-  tft.fillRect(relPosXTemp, relPosYTemp, TFT_WIDTH, 3, TFT_ORANGE);
-  /*
-  int16_t  x1, y1;
-  uint16_t w, h;
-  tft.getTextBounds("Temperature", 5, 90, &x1, &y1, &w, &h);
-  tft.fillRoundRect(5, 90, w, h, 3, TFT_ORANGE);
-  */
-
-  tft.fillRoundRect(relPosXTemp+5, relPosYTemp-182, 134, 20, 3, TFT_ORANGE);
-  tft.setTextColor(TFT_WHITE);
-  tft.setCursor(relPosXTemp+7, relPosYTemp-14);
-  tft.setTextSize(2);
-  tft.print("Temperatura");
-
   int relPosXLight = 0;
   int relPosYLight = 212;
 
-  tft.fillRect(relPosXLight, relPosYLight, TFT_WIDTH, 3, TFT_ORANGE);
+  //TEMP SECTION
+  tft.fillRect(relPosXTemp, relPosYTemp, TFT_WIDTH, 3, TFT_SEPATATOR_BAR);
+
+  /*int16_t  x1, y1;
+  uint16_t w, h;
+  tft.getTextBounds("Temperature", 5, 90, &x1, &y1, &w, &h);
+  tft.fillRoundRect(5, 90, w, h, 3, TFT_ORANGE);*/
+
+  tft.fillRoundRect(relPosXTemp+5, relPosYTemp, 134, 20, 3, TFT_SEPATATOR_BAR);
+  tft.setTextColor(HX8357_WHITE);
+  tft.setCursor(relPosXTemp+7, relPosYTemp+2);
+  tft.setTextSize(2);
+  tft.print(S_MAIN_SCREEN_TEMPERATURE);
+
+  paintGradient(0, relPosYLight-1, 60, TFT_TEMP_COLD, backgroundDisplay);
+
+  tft.setTextColor(HX8357_WHITE);
+  //tft.setTextFont(3);
+  tft.setCursor(relPosXTemp+7, relPosYTemp+30);
+  tft.print("Modo: AUTO");
+  tft.setCursor(relPosXTemp+7, relPosYTemp+50);
+  tft.print("Calentador: ON");
+  tft.setCursor(relPosXTemp+7, relPosYTemp+70);
+  tft.print("Temp. Estab: 25 C");
+
+  int relXPos = relPosXTemp+300;
+  //tft.drawChar(167, relXPos, relPosYTemp+15, 6);
+  //relXPos += tft.drawCentreString("27", relXPos, relPosYTemp+15, 6);
+  //Serial.println(relXPos);
+  //relXPos += tft.drawChar('o', 408, relPosYTemp+15, 3);
+  //Serial.println(relXPos);
+  //tft.drawChar('C', 464, relPosYTemp+15, 3);
+
+  //LIGHT SECTION
+  tft.fillRect(relPosXLight, relPosYLight, TFT_WIDTH, 3, TFT_SEPATATOR_BAR);
   /*
   int16_t  x1, y1;
   uint16_t w, h;
   tft.getTextBounds("Light", 5, 90, &x1, &y1, &w, &h);
   tft.fillRoundRect(5, 90, w, h, 3, TFT_ORANGE);
   */
-
-  tft.fillRect(relPosXLight+5, relPosYLight-16, 134, 16, TFT_ORANGE);
-  tft.setTextColor(TFT_WHITE);
-  tft.setCursor(relPosXLight+7, relPosYLight-14);
+  tft.fillRoundRect(relPosXLight+5, relPosYLight, 39, 20, 3, TFT_SEPATATOR_BAR);
+  tft.setTextColor(HX8357_WHITE);
+  tft.setCursor(relPosXLight+8, relPosYLight+2);
   tft.setTextSize(2);
-  tft.print("Luz");
+  tft.print(S_MAIN_SCREEN_LIGHT);
+
+  paintGradient(0, TFT_HEIGHT, 60, TFT_TEMP_OFF, backgroundDisplay);
 }
 
 /**
@@ -510,24 +610,29 @@ int getHeaterMode(){
   return heaterMode;
 }
 
+String getHeaterModeName(int heaterMode){
+  String mode = "";
+  switch(heaterMode){
+    case HEATER_MODE_AUTO:
+      mode = "AUTO";
+      break;
+    case HEATER_MODE_OFF:
+      mode = "OFF";
+      break;
+    case HEATER_MODE_ON:
+      mode = "ON";
+      break;
+  }
+
+  return mode;
+}
+
 void turnOnHeater(){
   if(!isHeaterOn()){
     digitalWrite(HEATER_RELAY_PIN, HIGH);
     startHeaterTimeTracking();
 
-    String mode;
-    switch(getHeaterMode()){
-      case HEATER_MODE_AUTO:
-        mode = "AUTO";
-        break;
-      case HEATER_MODE_OFF:
-        mode = "OFF";
-        break;
-      case HEATER_MODE_ON:
-        mode = "ON";
-        break;
-    }
-
+    String mode = getHeaterModeName(getHeaterMode());
     String message = "";
     message.concat(mode); message.concat("#");message.concat("ON#");
     message.concat(heaterTotalSeconds);
@@ -540,19 +645,7 @@ void turnOffHeater(){
     digitalWrite(HEATER_RELAY_PIN, LOW);
     stopHeaterTimeTracking();
 
-    String mode;
-    switch(getHeaterMode()){
-      case HEATER_MODE_AUTO:
-        mode = "AUTO";
-        break;
-      case HEATER_MODE_OFF:
-        mode = "OFF";
-        break;
-      case HEATER_MODE_ON:
-        mode = "ON";
-        break;
-    }
-
+    String mode = getHeaterModeName(getHeaterMode());
     String message = "";
     message.concat(mode); message.concat("#");message.concat("OFF#");
     message.concat(heaterTotalSeconds);
@@ -925,11 +1018,11 @@ void initRTC(){
 }
 
 void initDisplay(){
-  tft.init();
+  tft.begin(HX8357D);
   tft.setRotation(5);
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_DARKGREEN);
-  tft.setTextFont(1);
+  tft.fillScreen(HX8357_BLACK);
+  tft.setTextColor(TFT_DEBUG);
+  //tft.setTextFont(1);
   //tft.setTextSize(2);
 }
 
@@ -943,34 +1036,35 @@ void setup()
   Serial.println("INIT");
 
   initDisplay();
-  /*tft.setCursor(10, 10);
+  /*tft.setCursor(200, 10);
   tft.print("DISPLAY: INIT DONE");
   initMenuItems();
-  tft.setCursor(10, 40);
+  tft.setCursor(200, 40);
   tft.print("MENU: INIT DONE");
   initRotaryEncoder();
-  tft.setCursor(10, 60);
+  tft.setCursor(200, 60);
   tft.print("ROTARY ENCODER: INIT DONE");
   initEnterButton();
-  tft.setCursor(10, 80);
+  tft.setCursor(200, 80);
   tft.print("ENTER BUTTON: SET DONE");
   initCancelButton();
-  tft.setCursor(10, 100);
+  tft.setCursor(200, 100);
   tft.print("CANCEL BUTTON: SET DONE");
   initHeater();
-  tft.setCursor(10, 120);
+  tft.setCursor(200, 120);
   tft.print("HEATER: INIT DONE");
   initTempHumSensor();
-  tft.setCursor(10, 140);
+  tft.setCursor(200, 140);
   tft.print("TEMP / HUM SENSOR: INIT DONE");
   //initRTC();
-  tft.setCursor(10, 160);
+  tft.setCursor(200, 160);
   tft.print("RTC: INIT DONE");
-  delay(200);
-  */
+  delay(200);*/
+
   cleanScreen();
 
   updateMainScreen();
+  updateScreenDate();
 }
 
 void loop()
@@ -980,5 +1074,5 @@ void loop()
   //handleRotaryEncoder();
   //handleTempHumSensor(now);
   //handleHeater();
-  updateScreenClock();
+  //updateScreenClock();
 }
