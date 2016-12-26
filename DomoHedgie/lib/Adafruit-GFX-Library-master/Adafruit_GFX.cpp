@@ -699,7 +699,6 @@ void Adafruit_GFX::getTextBounds(char *str, int16_t x, int16_t y,
   *w  = *h = 0;
 
   if(gfxFont) {
-
     GFXglyph *glyph;
     uint8_t   first = pgm_read_byte(&gfxFont->first),
               last  = pgm_read_byte(&gfxFont->last),

@@ -1,0 +1,8 @@
+#define S_MAIN_SCREEN_TEMPERATURE "Temperature"
+#define S_MAIN_SCREEN_TEMPERATURE_MODE "Mode:"
+#define S_MAIN_SCREEN_TEMPERATURE_HEATER "Heater:"
+#define S_MAIN_SCREEN_TEMPERATURE_SET_TEMP "Set Temp:"
+#define S_MAIN_SCREEN_TEMPERATURE_CURRENT_TEMP "Current temperature"
+#define S_MAIN_SCREEN_LIGHT "Light"
+#define C_HOUR_SEPARATOR ':'
+#define C_DATE_SEPARATOR '/'
