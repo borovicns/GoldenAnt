@@ -31,7 +31,7 @@
 #include <Fonts/FreeMonoBold18pt7b.h>
 #include <Fonts/FreeMonoBold24pt7b.h>
 
-#include "i18n/DomoHedgie_i18n_es_ES.h"
+#include "i18n/DomoHedgie_i18n_en_US.h"
 
 /**
 * ANALOG PINS
@@ -68,6 +68,7 @@ const int MULTIPLEXER_S_PINS[] = {MULTIPLEXER_S0_PIN, MULTIPLEXER_S1_PIN, MULTIP
 #define CLOCK_SDA_PIN 20
 #define CLOCK_SCL_PIN 21
 
+#define LCD_PWM 7
 #define LCD_CS 30 // Chip Select
 #define LCD_CD 31 // Command/Data
 #define LCD_WR 32 // LCD Write
@@ -318,20 +319,8 @@ boolean isDisplayOn(){
   return displayOn;
 }
 
-void turnOnDisplay(){
-  if(!isDisplayOn()){
-    //TODO
-    //Turn display on
-    displayOn = true;
-  }
-}
-
-void turnOffDisplay(){
-  if(isDisplayOn()){
-    //TODO
-    //Turn display off
-    displayOn = false;
-  }
+void setBrightness(uint16_t brightness){
+  analogWrite(LCD_PWM, map(brightness, 0, 100, 0, 255));
 }
 
 void getTextBounds(String s, int16_t x, int16_t y, int16_t *x1, int16_t *y1, uint16_t *w, uint16_t *h) {
@@ -350,6 +339,7 @@ void getTextBounds(String s, int16_t x, int16_t y, int16_t *x1, int16_t *y1, uin
 void updateScreenDate(){
   Datetime now = getDateTime();
   tft.setFont(&FreeMonoBold18pt7b);
+  tft.setTextSize(1);
   tft.setTextColor(TFT_WHITE, TFT_BACKGROUND_COLOR);
   int xDatePos = 294;
   int yDatePos = 70;
@@ -390,6 +380,7 @@ void updateScreenClock(){
     }
 
     tft.setFont(&FreeMonoBold24pt7b);
+    tft.setTextSize(1);
     String s = "";
 
     if(ohh != hh){
@@ -519,7 +510,7 @@ void paintGradient(int x, int y, int lines, uint16_t initialColour, uint16_t fin
    tft.println("25C");
 
    String currentTemp = "25"; //TODO Get actual current temp
-   int currentTempXRelPos = 330;
+   int currentTempXRelPos = 340;
    int currentTempYRelPos = relPosYTemp+23;
    tft.setFont(&FreeMono9pt7b);
    tft.setTextSize(1);
@@ -541,20 +532,94 @@ void paintGradient(int x, int y, int lines, uint16_t initialColour, uint16_t fin
    int16_t  x, y;
    uint16_t w, h;
    tft.setFont(&FreeSansBold9pt7b);
+   tft.setTextSize(1);
    tft.fillRect(relPosXLight, relPosYLight, TFT_WIDTH, 3, TFT_SEPATATOR_BAR);
    getTextBounds(S_MAIN_SCREEN_LIGHT, relPosXLight+5, relPosYLight+2, &x, &y, &w, &h);
    tft.fillRoundRect(relPosXLight+5, relPosYLight, w+7, 21, 3, TFT_SEPATATOR_BAR);
    tft.setTextColor(TFT_WHITE);
    tft.setCursor(relPosXLight+7, relPosYLight+14);
-   tft.setTextSize(1);
    tft.print(S_MAIN_SCREEN_LIGHT);
 
    paintGradient(0, TFT_HEIGHT, 60, TFT_TEMP_OFF, TFT_BACKGROUND_COLOR);
+
+   tft.setTextSize(1);
+   tft.setTextColor(TFT_WHITE);
+   int parametersOffset = 35;
+   int parametersLineOffset = 15;
+   tft.setCursor(relPosXLight+7, relPosYLight+parametersOffset);
+
+   tft.setFont(&FreeMono12pt7b);
+   getTextBounds(S_MAIN_SCREEN_LIGHT_MODE, relPosXLight+7, relPosYLight+parametersOffset, &x, &y, &w, &h);
+   int modeLength = w;
+   int modeHeight = h;
+
+   getTextBounds(S_MAIN_SCREEN_LIGHT_LIGHTING, relPosXLight+7, relPosYLight+modeHeight+parametersLineOffset+parametersOffset, &x, &y, &w, &h);
+   int lightingLength = w;
+   int lightingHeight = h;
+
+   getTextBounds(S_MAIN_SCREEN_LIGHT_THRESHOLD, relPosXLight+7, relPosYLight+lightingHeight+parametersLineOffset+parametersOffset, &x, &y, &w, &h);
+   int thresholdLength = w;
+
+   int maxLength = modeLength;
+   if(lightingLength>maxLength) maxLength = lightingLength;
+   if(thresholdLength>maxLength) maxLength = thresholdLength;
+
+   int offset = 2;
+   tft.setCursor(maxLength-modeLength+offset, relPosYLight+parametersOffset);
+   tft.setFont(&FreeMono12pt7b);
+   tft.print(S_MAIN_SCREEN_LIGHT_MODE);
+   tft.setFont(&FreeMonoBold12pt7b);
+   tft.print("AUTO");
+
+   tft.setCursor(maxLength-lightingLength+offset, relPosYLight+parametersOffset+modeHeight+parametersLineOffset);
+   tft.setFont(&FreeMono12pt7b);
+   tft.print(S_MAIN_SCREEN_LIGHT_LIGHTING);
+   tft.setFont(&FreeMonoBold12pt7b);
+   tft.println("ON");
+
+   tft.setCursor(maxLength-thresholdLength+offset, relPosYLight+parametersOffset+modeHeight+parametersLineOffset+lightingHeight+parametersLineOffset);
+   tft.setFont(&FreeMono12pt7b);
+   tft.print(S_MAIN_SCREEN_LIGHT_THRESHOLD);
+   tft.setFont(&FreeMonoBold12pt7b);
+   tft.println("50%");
+
+   String currentLight = "25"; //TODO Get actual current light
+   int currentLightXRelPos = 340;
+   int currentLightYRelPos = relPosYLight+23;
+   tft.setFont(&FreeMono9pt7b);
+   tft.setTextSize(1);
+   getTextBounds(S_MAIN_SCREEN_LIGHT_CURRENT_LIGHT, 0, 0, &x, &y, &w, &h);
+   tft.setCursor(currentLightXRelPos-(w/2), currentLightYRelPos);
+   int currentLightHeight = h;
+   tft.print(S_MAIN_SCREEN_LIGHT_CURRENT_LIGHT);
+   tft.setFont(&FreeSansBold24pt7b);
+   tft.setTextSize(2);
+   getTextBounds(currentLight, 0, 0, &x, &y, &w, &h);
+   tft.setCursor(currentLightXRelPos-(w/2), currentLightYRelPos+currentLightHeight+65);
+   tft.print(currentLight);
+   tft.setTextSize(1);
+   tft.print("%");
  }
 
 void updateMainScreen(){
   updateMainScreenTemperatureSection();
   updateMainScreenLightSection();
+}
+
+void turnOnDisplay(){
+  if(!isDisplayOn()){
+    updateMainScreen();
+    setBrightness(100);
+    displayOn = true;
+  }
+}
+
+void turnOffDisplay(){
+  if(isDisplayOn()){
+    tft.fillScreen(TFT_BLACK);
+    setBrightness(0);
+    displayOn = false;
+  }
 }
 
 /**
@@ -1092,10 +1157,9 @@ void initRTC(){
 }
 
 void initDisplay(){
+  pinMode(LCD_PWM, OUTPUT);
   tft.reset();
-
   uint16_t identifier = tft.readID();
-
   if(identifier == 0x9325) {
     Serial.println(F("Found ILI9325 LCD driver"));
   } else if(identifier == 0x9328) {
@@ -1115,6 +1179,7 @@ void initDisplay(){
     Serial.println(F("If using the breakout board, it should NOT be #defined!"));
     Serial.println(F("Also if using the breakout, double-check that all wiring"));
     Serial.println(F("matches the tutorial."));
+
     return;
   }
 
@@ -1122,8 +1187,7 @@ void initDisplay(){
   tft.setRotation(3);
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_DEBUG);
-  //tft.setTextFont(1);
-  //tft.setTextSize(2);
+  setBrightness(100);
 }
 
 /**
@@ -1136,36 +1200,35 @@ void setup()
   Serial.println("INIT");
 
   initDisplay();
-  /*tft.setCursor(200, 10);
-  tft.print("DISPLAY: INIT DONE");
-  initMenuItems();
-  tft.setCursor(200, 40);
-  tft.print("MENU: INIT DONE");
-  initRotaryEncoder();
-  tft.setCursor(200, 60);
-  tft.print("ROTARY ENCODER: INIT DONE");
-  initEnterButton();
-  tft.setCursor(200, 80);
-  tft.print("ENTER BUTTON: SET DONE");
-  initCancelButton();
-  tft.setCursor(200, 100);
-  tft.print("CANCEL BUTTON: SET DONE");
-  initHeater();
-  tft.setCursor(200, 120);
-  tft.print("HEATER: INIT DONE");
-  initTempHumSensor();
-  tft.setCursor(200, 140);
-  tft.print("TEMP / HUM SENSOR: INIT DONE");
-  //initRTC();
-  tft.setCursor(200, 160);
-  tft.print("RTC: INIT DONE");
-  delay(200);*/
-
+  //tft.setCursor(200, 10);
+  //tft.print("DISPLAY: INIT DONE");
+  //initMenuItems();
+  //tft.setCursor(200, 40);
+  //tft.print("MENU: INIT DONE");
+  //initRotaryEncoder();
+  //tft.setCursor(200, 60);
+  //tft.print("ROTARY ENCODER: INIT DONE");
+  //initEnterButton();
+  //tft.setCursor(200, 80);
+  //tft.print("ENTER BUTTON: SET DONE");
+  //initCancelButton();
+  //tft.setCursor(200, 100);
+  //tft.print("CANCEL BUTTON: SET DONE");
+  //initHeater();
+  //tft.setCursor(200, 120);
+  //tft.print("HEATER: INIT DONE");
+  //initTempHumSensor();
+  //tft.setCursor(200, 140);
+  //tft.print("TEMP / HUM SENSOR: INIT DONE");
   initRTC();
+  //tft.setCursor(200, 160);
+  //tft.print("RTC: INIT DONE");
+  //delay(200);
+
   cleanScreen();
 
-  updateMainScreen();
   updateScreenDate();
+  updateMainScreen();
 }
 
 void loop()
