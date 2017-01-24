@@ -10,3 +10,10 @@
 #define S_MAIN_SCREEN_LIGHT_CURRENT_LIGHT "Current light level"
 #define C_HOUR_SEPARATOR ':'
 #define C_DATE_SEPARATOR '/'
+#define S_MAIN_MENU_TITLE "Main menu"
+#define S_MAIN_MENU_SET_TEMP "Set temperature"
+#define S_MAIN_MENU_SET_LIGHT "Set light intensity"
+#define S_MAIN_MENU_SET_DATE_TIME "Set date/time"
+#define S_MAIN_MENU_SHOW_HEATING_TIME "Show heating time"
+#define S_MAIN_MENU_SHOW_LIGHTING_TIME "Show lighting time"
+#define S_MAIN_MENU_TURN_OFF_DISPLAY "Turn off display"

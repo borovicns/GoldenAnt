@@ -31,7 +31,7 @@
 #include <Fonts/FreeMonoBold18pt7b.h>
 #include <Fonts/FreeMonoBold24pt7b.h>
 
-#include "i18n/DomoHedgie_i18n_en_US.h"
+#include "i18n/DomoHedgie_i18n_es_ES.h"
 
 /**
 * ANALOG PINS
@@ -143,7 +143,7 @@ struct MenuItem{
 
 const int mainMenuDimension = 6;
 MenuItem mainMenu[mainMenuDimension];
-int menuIndex;
+int menuIndex, oldMenuIndex;
 
 /**
 * BUTTONS VARIABLES
@@ -201,7 +201,7 @@ boolean displayOn = true;
 Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 #define TFT_BACKGROUND_COLOR 0x2966
 #define TFT_DEBUG 0x03E0
-#define TFT_SEPATATOR_BAR 0xED00
+#define TFT_SEPARATOR_BAR 0xED00
 #define TFT_HEIGHT 320
 #define TFT_WIDTH 480
 
@@ -215,6 +215,9 @@ Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 
 #define TFT_CLOCK_COLOR 0xFFFF
 #define TFT_CLOCK_COLON_OFF 0x39C4
+
+#define TFT_MENU_UNDERSCORE_NO_SELECTED 0xB575
+#define TFT_MENU_UNDERSCORE_SELECTED 0xED00
 
 #define TFT_WHITE 0xFFFF
 #define TFT_BLACK 0x0000
@@ -230,6 +233,15 @@ int textXOffset = 3;
 uint8_t fillRectPlus = 3;
 uint8_t charWidth = 24;
 uint8_t charHeight = 31;
+
+//MENU
+uint8_t radius = 21;
+uint8_t initXPos = 3;
+uint8_t initYPos = 24;
+int8_t offsetX = 2;
+int8_t offsetY = 21;
+uint8_t initPosYText = 72;
+uint8_t leap = 45;
 
 /**
 * DATETIME METHODS
@@ -423,11 +435,11 @@ void updateScreenClock(){
   }
 }
 
-void paintGradient(int x, int y, int lines, uint16_t initialColour, uint16_t finalColour){
+void paintVerticalGradient(uint16_t x, uint16_t y, uint16_t height, uint16_t width, uint16_t initialColour, uint16_t finalColour){
   /*uint8_t initialRed = ((initialColour >> 11) & 0x1F);
   uint8_t initialGreen = ((initialColour >> 5) & 0x3F);
   uint8_t initialBlue = (initialColour & 0x1F);*/
-  double gradientHeight = (double)lines;
+  double gradientHeight = (double)height;
 
   double ini = ((initialColour >> 11) & 0x1F);
   double fin = ((finalColour >> 11) & 0x1F);
@@ -445,9 +457,33 @@ void paintGradient(int x, int y, int lines, uint16_t initialColour, uint16_t fin
     int red = ((initialColour >> 11) & 0x1F) + ((int)(redLeap*i));
     int green = ((initialColour >> 5) & 0x3F) + ((int)(greenLeap*i));
     int blue = (initialColour & 0x1F) + ((int)(blueLeap*i));
-    tft.drawFastHLine(x, y-i, TFT_WIDTH, red << 11 | green << 5 | blue);
+    tft.drawFastHLine(x, y-i, width, red << 11 | green << 5 | blue);
   }
-  tft.drawFastHLine(x, y-gradientHeight, TFT_WIDTH, finalColour);
+  tft.drawFastHLine(x, y-gradientHeight, width, finalColour);
+}
+
+void paintHorizontalGradient(uint16_t x, uint16_t y, uint16_t height, uint16_t width, uint16_t initialColour, uint16_t finalColour){
+  double gradientWidth = (double)width;
+
+  double ini = ((initialColour >> 11) & 0x1F);
+  double fin = ((finalColour >> 11) & 0x1F);
+  double redLeap = (fin-ini)/gradientWidth;
+
+  ini = ((initialColour >> 5) & 0x3F);
+  fin = ((finalColour >> 5) & 0x3F);
+  double greenLeap = (fin-ini)/gradientWidth;
+
+  ini = (initialColour & 0x1F);
+  fin = (finalColour & 0x1F);
+  double blueLeap = (fin-ini)/gradientWidth;
+
+  for(int i=0;i<gradientWidth-1;i++){
+    int red = ((initialColour >> 11) & 0x1F) + ((int)(redLeap*i));
+    int green = ((initialColour >> 5) & 0x3F) + ((int)(greenLeap*i));
+    int blue = (initialColour & 0x1F) + ((int)(blueLeap*i));
+    tft.drawFastVLine(x+i, y, height, red << 11 | green << 5 | blue);
+  }
+  tft.drawFastVLine(x+gradientWidth, y, height, finalColour);
 }
 
  void updateMainScreenTemperatureSection(){
@@ -457,18 +493,18 @@ void paintGradient(int x, int y, int lines, uint16_t initialColour, uint16_t fin
 
    tft.setFont(&FreeSansBold9pt7b);
    tft.fillRect(relPosXTemp, relPosYTemp, TFT_WIDTH, tempSectionHeight, TFT_BACKGROUND_COLOR); //RESET TEMP SECTION
-   tft.fillRect(relPosXTemp, relPosYTemp, TFT_WIDTH, 3, TFT_SEPATATOR_BAR);
+   tft.fillRect(relPosXTemp, relPosYTemp, TFT_WIDTH, 3, TFT_SEPARATOR_BAR);
 
    int16_t  x, y;
    uint16_t w, h;
    getTextBounds(S_MAIN_SCREEN_TEMPERATURE, relPosXTemp+5, relPosYTemp+2, &x, &y, &w, &h);
-   tft.fillRoundRect(relPosXTemp+5, relPosYTemp, w+7, 21, 3, TFT_SEPATATOR_BAR);
+   tft.fillRoundRect(relPosXTemp+5, relPosYTemp, w+7, 21, 3, TFT_SEPARATOR_BAR);
    tft.setTextColor(TFT_WHITE);
    tft.setCursor(relPosXTemp+7, relPosYTemp+14);
    tft.setTextSize(1);
    tft.print(S_MAIN_SCREEN_TEMPERATURE);
 
-   paintGradient(0, relPosYTemp+tempSectionHeight, 60, TFT_TEMP_OK, TFT_BACKGROUND_COLOR);
+   paintVerticalGradient(0, relPosYTemp+tempSectionHeight, 60, TFT_WIDTH, TFT_TEMP_OK, TFT_BACKGROUND_COLOR);
 
    tft.setTextSize(1);
    tft.setTextColor(TFT_WHITE);
@@ -533,14 +569,14 @@ void paintGradient(int x, int y, int lines, uint16_t initialColour, uint16_t fin
    uint16_t w, h;
    tft.setFont(&FreeSansBold9pt7b);
    tft.setTextSize(1);
-   tft.fillRect(relPosXLight, relPosYLight, TFT_WIDTH, 3, TFT_SEPATATOR_BAR);
+   tft.fillRect(relPosXLight, relPosYLight, TFT_WIDTH, 3, TFT_SEPARATOR_BAR);
    getTextBounds(S_MAIN_SCREEN_LIGHT, relPosXLight+5, relPosYLight+2, &x, &y, &w, &h);
-   tft.fillRoundRect(relPosXLight+5, relPosYLight, w+7, 21, 3, TFT_SEPATATOR_BAR);
+   tft.fillRoundRect(relPosXLight+5, relPosYLight, w+7, 21, 3, TFT_SEPARATOR_BAR);
    tft.setTextColor(TFT_WHITE);
    tft.setCursor(relPosXLight+7, relPosYLight+14);
    tft.print(S_MAIN_SCREEN_LIGHT);
 
-   paintGradient(0, TFT_HEIGHT, 60, TFT_TEMP_OFF, TFT_BACKGROUND_COLOR);
+   paintVerticalGradient(0, TFT_HEIGHT, 60, TFT_WIDTH, TFT_TEMP_OFF, TFT_BACKGROUND_COLOR);
 
    tft.setTextSize(1);
    tft.setTextColor(TFT_WHITE);
@@ -601,14 +637,57 @@ void paintGradient(int x, int y, int lines, uint16_t initialColour, uint16_t fin
    tft.print("%");
  }
 
-void updateMainScreen(){
+void showMainScreen(){
   updateMainScreenTemperatureSection();
   updateMainScreenLightSection();
 }
 
+void paintUnderscoreMenuItem(uint8_t menuIndex, uint16_t color){
+  tft.fillRect(initXPos, (offsetY+initYPos)*(menuIndex+1), radius*2, radius*2, color);
+  tft.fillCircle(radius+offsetX, ((offsetY+initYPos)*(menuIndex+1))+radius, 20, TFT_BACKGROUND_COLOR);
+  tft.fillRect(initXPos, (offsetY+initYPos)*(menuIndex+1), radius*2, radius, TFT_BACKGROUND_COLOR);
+  tft.fillRect(radius+3, ((offsetY+initYPos)*(menuIndex+1))+radius, radius, radius, TFT_BACKGROUND_COLOR);
+  //tft.fillRect(initXPos, ((offsetY+initYPos)*(menuIndex+1))+(radius*2), TFT_WIDTH, 3, color);
+  paintHorizontalGradient(initXPos, ((offsetY+initYPos)*(menuIndex+1))+(radius*2), 3, TFT_WIDTH-3, color, TFT_BACKGROUND_COLOR);
+}
+
+void paintMenuItem(uint8_t menuIndex){
+  tft.setFont(&FreeMonoBold12pt7b);
+  tft.setCursor(46, initPosYText+(menuIndex*leap));
+  tft.print(mainMenu[menuIndex].name);
+}
+
+void updateMenuScreen(){
+  paintUnderscoreMenuItem(menuIndex, TFT_MENU_UNDERSCORE_SELECTED);
+  paintUnderscoreMenuItem(oldMenuIndex, TFT_MENU_UNDERSCORE_NO_SELECTED);
+
+  paintMenuItem(menuIndex);
+  paintMenuItem(oldMenuIndex);
+}
+
+void showMenuScreen(){
+  cleanScreen();
+
+  tft.setFont(&FreeSansBold9pt7b);
+  int16_t  x, y;
+  uint16_t w, h;
+  getTextBounds(S_MAIN_MENU_TITLE, 5, 2, &x, &y, &w, &h);
+  tft.fillRect(0, 0, 3, TFT_HEIGHT, TFT_SEPARATOR_BAR);
+  tft.fillRoundRect(0, 3, w+15, 21, 3, TFT_SEPARATOR_BAR);
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(8, 18);
+  tft.setTextSize(1);
+  tft.print(S_MAIN_MENU_TITLE);
+
+  for(int i=0;i<mainMenuDimension;i++){
+    paintMenuItem(i);
+    paintUnderscoreMenuItem(i, TFT_MENU_UNDERSCORE_NO_SELECTED);
+  }
+}
+
 void turnOnDisplay(){
   if(!isDisplayOn()){
-    updateMainScreen();
+    showMainScreen();
     setBrightness(100);
     displayOn = true;
   }
@@ -861,15 +940,6 @@ void handleHeater(){
 **/
 
 /**
-* Returns the previos menu item to the current (selected) menu item
-* args: none
-* return: The MenuItem previous to the current one
-*/
-MenuItem previousMenuItem(){
-  return mainMenu[((menuIndex-1)<0)?mainMenuDimension-1:menuIndex-1];
-}
-
-/**
 * Returns the current (selected) menu item
 * args: none
 * return: The current (selected) menu item
@@ -879,20 +949,12 @@ MenuItem currentMenuItem(){
 }
 
 /**
-* Returns the next menu item to the current (selected) menu item
-* args: none
-* return: The MenuItem next to the current one
-*/
-MenuItem nextMenuItem(){
-  return mainMenu[((menuIndex+1)==mainMenuDimension)?0:menuIndex+1];
-}
-
-/**
 * Moves one position forward the index to the selected menu item
 * args: none
 * return: The current menu item index
 */
 int moveMenuIndexForward(){
+  oldMenuIndex = menuIndex;
   menuIndex = ((menuIndex+1)==mainMenuDimension)?0:menuIndex+1;
   return menuIndex;
 }
@@ -903,6 +965,7 @@ int moveMenuIndexForward(){
 * return: The current menu item index
 */
 int moveMenuIndexBackward(){
+  oldMenuIndex = menuIndex;
   menuIndex = ((menuIndex-1)<0)?mainMenuDimension-1:menuIndex-1;
   return menuIndex;
 }
@@ -916,25 +979,6 @@ int moveMenuIndexBackward(){
 */
 void rotEncoder(){
   rotating=true;
-}
-
-/**
-* Updates the main menu displaying the selected menu item in accordance with the
-* movement of the rotary encoder. Before and after the selected menu item are
-* also displayed the previous and next menu items.
-* args: none
-* return: none
-*/
-void updateMainMenu(){
-  //TODO update the main menu in accordance with the movement of the rotary
-  //encoder displaying the menu items.
-
-  //TEMPORARY CODE
-  Serial.println(previousMenuItem().name);
-  Serial.print("> ");
-  Serial.println(currentMenuItem().name);
-  Serial.println(nextMenuItem().name);
-  Serial.println("\n");
 }
 
 /**
@@ -953,7 +997,7 @@ void handleRotaryEncoder(){
 
         if(isDisplayOn()){
           moveMenuIndexForward();
-          updateMainMenu();
+          updateMenuScreen();
         }
         else turnOnDisplay();
       }
@@ -966,7 +1010,7 @@ void handleRotaryEncoder(){
 
         if(isDisplayOn()){
           moveMenuIndexBackward();
-          updateMainMenu();
+          updateMenuScreen();
         }
         else turnOnDisplay();
       }
@@ -1077,30 +1121,31 @@ void initMenuItems(){
   menuIndex = 0;
 
   mainMenu[menuIndex].id = menuIndex;
-  mainMenu[menuIndex].name = "Set min. temperature";
+  mainMenu[menuIndex].name = S_MAIN_MENU_SET_TEMP;
   menuIndex++;
 
   mainMenu[menuIndex].id = menuIndex;
-  mainMenu[menuIndex].name = "Set light intensity";
+  mainMenu[menuIndex].name = S_MAIN_MENU_SET_LIGHT;
   menuIndex++;
 
   mainMenu[menuIndex].id = menuIndex;
-  mainMenu[menuIndex].name = "Set date/time";
+  mainMenu[menuIndex].name = S_MAIN_MENU_SET_DATE_TIME;
   menuIndex++;
 
   mainMenu[menuIndex].id = menuIndex;
-  mainMenu[menuIndex].name = "Show heating time";
+  mainMenu[menuIndex].name = S_MAIN_MENU_SHOW_HEATING_TIME;
   menuIndex++;
 
   mainMenu[menuIndex].id = menuIndex;
-  mainMenu[menuIndex].name = "Show lighting time";
+  mainMenu[menuIndex].name = S_MAIN_MENU_SHOW_LIGHTING_TIME;
   menuIndex++;
 
   mainMenu[menuIndex].id = menuIndex;
-  mainMenu[menuIndex].name = "Turn off display";
+  mainMenu[menuIndex].name = S_MAIN_MENU_TURN_OFF_DISPLAY;
   menuIndex++;
 
   menuIndex = 0;
+  oldMenuIndex = 1;
 }
 
 void initEnterButton(){
@@ -1202,7 +1247,7 @@ void setup()
   initDisplay();
   //tft.setCursor(200, 10);
   //tft.print("DISPLAY: INIT DONE");
-  //initMenuItems();
+  initMenuItems();
   //tft.setCursor(200, 40);
   //tft.print("MENU: INIT DONE");
   //initRotaryEncoder();
@@ -1227,8 +1272,10 @@ void setup()
 
   cleanScreen();
 
-  updateScreenDate();
-  updateMainScreen();
+  //updateScreenDate();
+  //showMainScreen();
+
+  showMenuScreen();
 }
 
 void loop()
@@ -1238,11 +1285,15 @@ void loop()
   //handleRotaryEncoder();
   //handleTempHumSensor(now);
   //handleHeater();
-  updateScreenClock();
+  //updateScreenClock();
 
   /*tft.drawFastVLine(104, 0, 320, 0xFFFF);
   tft.setFont(&FreeMonoBold24pt7b);
   tft.setCursor(100, 140);
   tft.setTextColor(0xFFFF);
   tft.print("0");*/
+
+  updateMenuScreen();
+  if(millis()%2==0)moveMenuIndexForward();
+  else moveMenuIndexBackward();
 }
